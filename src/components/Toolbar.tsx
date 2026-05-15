@@ -15,16 +15,22 @@ const STROKE_WIDTHS = [2, 5, 8, 14, 22];
 const FONT_SIZES = [16, 22, 30, 42];
 
 const MATH_FORMULAS = [
-  { label: 'Recta', value: 'y = mx + b' },
   { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²' },
-  { label: 'Parábola', value: 'y = a(x - h)² + k' },
   { label: 'Elipse', value: 'x²/a² + y²/b² = 1' },
-  { label: 'Polares', value: 'r = a + b cos(θ)' },
-  { label: 'Seno', value: 'f(θ) = sin(θ)' },
-  { label: 'Coseno', value: 'f(θ) = cos(θ)' },
-  { label: 'Paramétricas', value: 'x = f(t), y = g(t)' },
-  { label: 'Integral', value: '∫ f(x) dx' },
-  { label: 'Derivada', value: 'dy/dx = f\'(x)' },
+  { label: 'Hipérbola', value: 'x²/a² - y²/b² = 1' },
+  { label: 'Parábola', value: 'y = a(x - h)² + k' },
+  { label: 'Esfera', value: 'x² + y² + z² = r²' },
+  { label: 'Cilíndro', value: 'x² + y² = r²' },
+  { label: 'Elipsoide', value: 'x²/a² + y²/b² + z²/c² = 1' },
+  { label: 'Paraboloide Elíptico', value: 'z = x²/a² + y²/b²' },
+  { label: 'Paraboloide Hiperbólico', value: 'z = y²/b² - x²/a²' },
+  { label: 'Hiperboloide 1 hoja', value: 'x²/a² + y²/b² - z²/c² = 1' },
+  { label: 'Hiperboloide 2 hojas', value: 'z²/c² - x²/a² - y²/b² = 1' },
+  { label: 'Cono Elíptico', value: 'z²/c² = x²/a² + y²/b²' },
+  { label: 'Polares (x, y)', value: 'x = r cos(θ), y = r sin(θ)' },
+  { label: 'Polares: Caracol', value: 'r = a ± b cos(θ)' },
+  { label: 'Polares: Rosa', value: 'r = a cos(nθ)' },
+  { label: 'Polares: Espiral', value: 'r = a + bθ' },
 ];
 
 interface ToolbarProps {

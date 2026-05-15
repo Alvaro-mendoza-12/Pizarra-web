@@ -57,6 +57,7 @@ interface ToolbarProps {
   onDeleteSelected: () => void;
   onToggleGrid: () => void;
   onInsertFormula: (formula: string) => void;
+  onOpenGraphModal: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
@@ -125,7 +126,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         {btn(p.tool === 'axis', () => p.onTool('axis'), <Plus size={20} />, 'Ejes Cartesianos')}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.15)', margin: '2px 0' }} />
         {btn(p.tool === 'text', () => p.onTool('text'), <Type size={20} />, 'Texto (T)')}
-        {btn(p.tool === 'graph', () => p.onTool('graph'), <Activity size={20} />, 'Graficador Función')}
+        {btn(false, () => p.onOpenGraphModal(), <Activity size={20} />, 'Graficador Matemático')}
         <div style={{ position: 'relative' }}>
           {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
           {showMath && (

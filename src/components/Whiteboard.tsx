@@ -154,21 +154,6 @@ export default function Whiteboard() {
       return;
     }
 
-    if (tool === 'graph') {
-      const stage = stageRef.current;
-      if (!stage) return;
-      const canvasPos = getCanvasPos();
-      const stageBox = stage.container().getBoundingClientRect();
-      const pointer = stage.getPointerPosition();
-      setShowGraphModal({
-        x: pointer.x + stageBox.left,
-        y: pointer.y + stageBox.top,
-        canvasX: canvasPos.x,
-        canvasY: canvasPos.y,
-      });
-      return;
-    }
-
     setIsDrawing(true);
     setSelectedIds([]);
     const pos = getCanvasPos();
@@ -471,6 +456,14 @@ export default function Whiteboard() {
         onDeleteSelected={deleteSelected}
         onToggleGrid={() => setShowGrid(g => !g)}
         onInsertFormula={handleInsertFormula}
+        onOpenGraphModal={() => {
+          setShowGraphModal({
+            x: window.innerWidth / 2 - 140,
+            y: window.innerHeight / 2 - 100,
+            canvasX: (window.innerWidth / 2 - stagePos.x) / stageScale,
+            canvasY: (window.innerHeight / 2 - stagePos.y) / stageScale,
+          });
+        }}
       />
 
       {/* Inline text editor overlay */}

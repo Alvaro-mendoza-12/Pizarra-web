@@ -10,6 +10,25 @@ import { useHistory } from '../hooks/useHistory';
 
 const GRID_SIZE = 40;
 
+const MATH_FORMULAS = [
+  { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²' },
+  { label: 'Elipse', value: 'x²/a² + y²/b² = 1' },
+  { label: 'Hipérbola', value: 'x²/a² - y²/b² = 1' },
+  { label: 'Parábola', value: 'y = a(x - h)² + k' },
+  { label: 'Esfera', value: 'x² + y² + z² = r²' },
+  { label: 'Cilíndro', value: 'x² + y² = r²' },
+  { label: 'Elipsoide', value: 'x²/a² + y²/b² + z²/c² = 1' },
+  { label: 'Paraboloide Elíptico', value: 'z = x²/a² + y²/b²' },
+  { label: 'Paraboloide Hiperbólico', value: 'z = y²/b² - x²/a²' },
+  { label: 'Hiperboloide 1 hoja', value: 'x²/a² + y²/b² - z²/c² = 1' },
+  { label: 'Hiperboloide 2 hojas', value: 'z²/c² - x²/a² - y²/b² = 1' },
+  { label: 'Cono Elíptico', value: 'z²/c² = x²/a² + y²/b²' },
+  { label: 'Polares (x, y)', value: 'x = r cos(θ), y = r sin(θ)' },
+  { label: 'Polares: Caracol', value: 'r = a ± b cos(θ)' },
+  { label: 'Polares: Rosa', value: 'r = a cos(nθ)' },
+  { label: 'Polares: Espiral', value: 'r = a + bθ' },
+];
+
 function GridLines({ stageScale, stagePos }: { stageScale: number; stagePos: { x: number; y: number } }) {
   const lines: React.ReactNode[] = [];
   const w = window.innerWidth / stageScale + GRID_SIZE * 2;
@@ -93,8 +112,8 @@ export default function Whiteboard() {
   const [textValue, setTextValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Graph View (Full Screen)
   const [isGraphViewOpen, setIsGraphViewOpen] = useState(false);
+  const [showMathMenu, setShowMathMenu] = useState(false);
 
   const stageRef = useRef<any>(null);
   const trRef = useRef<any>(null);
@@ -300,12 +319,55 @@ export default function Whiteboard() {
     );
   }, [tool]);
 
+  const elementsRef = useRef(elements);
+  useEffect(() => { elementsRef.current = elements; }, [elements]);
+
+  const handleNodeDragMove = useCallback((id: string, e: any) => {
+    if (selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+    const startPos = dragStartPositions.current[id];
+    if (!startPos) return;
+    
+    // Calculate delta in canvas space
+    const dx = e.target.x() - startPos.x;
+    const dy = e.target.y() - startPos.y;
+
+    selectedIds.forEach(sid => {
+      if (sid === id) return;
+      const node = nodeRefs.current[sid];
+      const sPos = dragStartPositions.current[sid];
+      if (node && sPos) {
+        // Update nodes visually (fast, no state)
+        node.x(sPos.x + dx);
+        node.y(sPos.y + dy);
+      }
+    });
+    
+    if (trRef.current) trRef.current.getLayer()?.batchDraw();
+  }, [selectedIds]);
+
   const handleChange = useCallback((id: string, attrs: any) => {
-    setElements(prev => prev.map(e => e.id === id ? { ...e, ...attrs } : e));
-    // We only push to history once if it's a multi-selection? 
-    // Actually, pushing on every small change is fine as long as they are grouped in the same tick.
-    // But for safety, let's use the functional update.
-  }, []);
+    // Round to prevent sub-pixel jumping
+    const rounded = { ...attrs };
+    if (rounded.x !== undefined) rounded.x = Math.round(rounded.x * 10) / 10;
+    if (rounded.y !== undefined) rounded.y = Math.round(rounded.y * 10) / 10;
+
+    if (selectedIds.length > 1 && selectedIds.includes(id)) {
+      // Update ALL selected elements from their physical nodes
+      const updated = elementsRef.current.map(e => {
+        if (selectedIds.includes(e.id)) {
+          const node = nodeRefs.current[e.id];
+          if (node) return { ...e, x: Math.round(node.x() * 10) / 10, y: Math.round(node.y() * 10) / 10 };
+        }
+        return e;
+      });
+      setElements(updated);
+      pushHistory(updated);
+    } else {
+      const updated = elementsRef.current.map(e => e.id === id ? { ...e, ...rounded } : e);
+      setElements(updated);
+      pushHistory(updated);
+    }
+  }, [selectedIds, pushHistory]);
 
   const deleteSelected = useCallback(() => {
     if (!selectedIds.length) return;
@@ -397,25 +459,6 @@ export default function Whiteboard() {
     });
   }, [selectedIds]);
 
-  const handleNodeDragMove = useCallback((id: string, e: any) => {
-    if (selectedIds.length <= 1 || !selectedIds.includes(id)) return;
-    const startPos = dragStartPositions.current[id];
-    if (!startPos) return;
-    const dx = e.target.x() - startPos.x;
-    const dy = e.target.y() - startPos.y;
-
-    selectedIds.forEach(sid => {
-      if (sid === id) return;
-      const node = nodeRefs.current[sid];
-      const sPos = dragStartPositions.current[sid];
-      if (node && sPos) {
-        node.x(sPos.x + dx);
-        node.y(sPos.y + dy);
-      }
-    });
-    // Force transformer to update its box
-    if (trRef.current) trRef.current.getLayer()?.batchDraw();
-  }, [selectedIds]);
 
   const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
 
@@ -443,7 +486,7 @@ export default function Whiteboard() {
         onZoomReset={() => { setStageScale(1); setStagePos({ x: 0, y: 0 }); }}
         onDeleteSelected={deleteSelected}
         onToggleGrid={() => setShowGrid(g => !g)}
-        onInsertFormula={handleInsertFormula}
+        onInsertFormula={() => setShowMathMenu(!showMathMenu)}
         onOpenGraphModal={() => setIsGraphViewOpen(true)}
       />
 
@@ -487,6 +530,37 @@ export default function Whiteboard() {
         />
       )}
 
+      {/* Math Formulas Panel (Overlay) */}
+      {showMathMenu && (
+        <div className="glass-panel" style={{
+          position: 'fixed', left: 80, top: '50%', transform: 'translateY(-50%)',
+          width: 240, padding: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 10,
+          maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase' }}>Fórmulas</span>
+            <button onClick={() => setShowMathMenu(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18 }}>×</button>
+          </div>
+          {MATH_FORMULAS.map(f => (
+            <button 
+              key={f.label}
+              className="toolbar-btn" 
+              style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 14px', height: 'auto', textAlign: 'left', borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}
+              onClick={() => {
+                handleInsertFormula(f.value);
+                setShowMathMenu(false);
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{f.label}</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{f.value}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       <Stage
         width={window.innerWidth} height={window.innerHeight}
         ref={stageRef}
@@ -508,7 +582,7 @@ export default function Whiteboard() {
 
           {elements.map(el => {
             const isSel = selectedIds.includes(el.id);
-            const isDraggable = isSel && tool === 'select' && selectedIds.length === 1;
+            const isDraggable = isSel && tool === 'select';
             return (
               <ElementWrapper
                 key={el.id}
@@ -528,35 +602,9 @@ export default function Whiteboard() {
 
           <Transformer
             ref={trRef}
-            draggable
             boundBoxFunc={(oldBox, newBox) => {
               if (newBox.width < 5 || newBox.height < 5) return oldBox;
               return newBox;
-            }}
-            onDragEnd={(e) => {
-              if (e.target !== trRef.current) return;
-              const dx = e.target.x();
-              const dy = e.target.y();
-              // Reset Transformer position to 0,0 but apply delta to nodes
-              e.target.x(0);
-              e.target.y(0);
-              
-              const nodes = trRef.current.nodes();
-              let updated = [...elements];
-              nodes.forEach((node: any) => {
-                const elIdx = updated.findIndex(el => el.id === node.id());
-                if (elIdx !== -1) {
-                  updated[elIdx] = {
-                    ...updated[elIdx],
-                    x: node.x() + dx,
-                    y: node.y() + dy
-                  };
-                  node.x(node.x() + dx);
-                  node.y(node.y() + dy);
-                }
-              });
-              setElements(updated);
-              pushHistory(updated);
             }}
             onTransformEnd={() => {
               if (!trRef.current) return;

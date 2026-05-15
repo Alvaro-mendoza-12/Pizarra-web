@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   MousePointer2, Pen, Eraser, Square, Circle as CircleIcon,
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
@@ -13,25 +13,6 @@ const COLORS = [
 ];
 const STROKE_WIDTHS = [2, 5, 8, 14, 22];
 const FONT_SIZES = [16, 22, 30, 42];
-
-const MATH_FORMULAS = [
-  { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²' },
-  { label: 'Elipse', value: 'x²/a² + y²/b² = 1' },
-  { label: 'Hipérbola', value: 'x²/a² - y²/b² = 1' },
-  { label: 'Parábola', value: 'y = a(x - h)² + k' },
-  { label: 'Esfera', value: 'x² + y² + z² = r²' },
-  { label: 'Cilíndro', value: 'x² + y² = r²' },
-  { label: 'Elipsoide', value: 'x²/a² + y²/b² + z²/c² = 1' },
-  { label: 'Paraboloide Elíptico', value: 'z = x²/a² + y²/b²' },
-  { label: 'Paraboloide Hiperbólico', value: 'z = y²/b² - x²/a²' },
-  { label: 'Hiperboloide 1 hoja', value: 'x²/a² + y²/b² - z²/c² = 1' },
-  { label: 'Hiperboloide 2 hojas', value: 'z²/c² - x²/a² - y²/b² = 1' },
-  { label: 'Cono Elíptico', value: 'z²/c² = x²/a² + y²/b²' },
-  { label: 'Polares (x, y)', value: 'x = r cos(θ), y = r sin(θ)' },
-  { label: 'Polares: Caracol', value: 'r = a ± b cos(θ)' },
-  { label: 'Polares: Rosa', value: 'r = a cos(nθ)' },
-  { label: 'Polares: Espiral', value: 'r = a + bθ' },
-];
 
 interface ToolbarProps {
   tool: Tool;
@@ -61,8 +42,6 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
-  const [showMath, setShowMath] = useState(false);
-
   const btn = (active: boolean, onClick: () => void, icon: React.ReactNode, title: string) => (
     <button className={`toolbar-btn ${active ? 'active' : ''}`} onClick={onClick} title={title}>
       {icon}
@@ -127,42 +106,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         <div style={{ height: 1, background: 'rgba(255,255,255,0.15)', margin: '2px 0' }} />
         {btn(p.tool === 'text', () => p.onTool('text'), <Type size={20} />, 'Texto (T)')}
         {btn(false, () => p.onOpenGraphModal(), <Activity size={20} />, 'Graficador Matemático')}
-        <div style={{ position: 'relative' }}>
-          {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
-          {showMath && (
-            <div className="glass-panel" style={{
-              position: 'fixed', // Fixed to avoid clipping by sidebar overflow
-              bottom: 'auto', 
-              top: '50%',
-              left: 75, // Next to the sidebar
-              transform: 'translateY(-50%)',
-              width: 220, padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
-              maxHeight: 400, overflowY: 'auto', zIndex: 1000
-            }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, padding: '4px 8px', textTransform: 'uppercase' }}>
-                Fórmulas
-              </div>
-              {MATH_FORMULAS.map(f => (
-                <button 
-                  key={f.label}
-                  className="toolbar-btn" 
-                  style={{ width: '100%', justifyContent: 'flex-start', padding: '8px 12px', height: 'auto', textAlign: 'left', borderRadius: 6 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    p.onInsertFormula(f.value);
-                    setShowMath(false);
-                    p.onTool('select');
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>{f.label}</span>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2, fontFamily: 'monospace' }}>{f.value}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {btn(false, () => p.onInsertFormula(""), <Sigma size={20} />, 'Fórmulas Matemáticas')}
       </div>
 
       {/* Right properties panel */}

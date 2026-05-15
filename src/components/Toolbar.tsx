@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   MousePointer2, Pen, Eraser, Square, Circle as CircleIcon,
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
-  ZoomIn, ZoomOut, RotateCcw, Grid
+  ZoomIn, ZoomOut, RotateCcw, Grid, Sigma
 } from 'lucide-react';
 import type { Tool } from '../types';
 
@@ -13,6 +13,19 @@ const COLORS = [
 ];
 const STROKE_WIDTHS = [2, 5, 8, 14, 22];
 const FONT_SIZES = [16, 22, 30, 42];
+
+const MATH_FORMULAS = [
+  { label: 'Recta', value: 'y = mx + b' },
+  { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²' },
+  { label: 'Parábola', value: 'y = a(x - h)² + k' },
+  { label: 'Elipse', value: 'x²/a² + y²/b² = 1' },
+  { label: 'Polares', value: 'r = a + b cos(θ)' },
+  { label: 'Seno', value: 'f(θ) = sin(θ)' },
+  { label: 'Coseno', value: 'f(θ) = cos(θ)' },
+  { label: 'Paramétricas', value: 'x = f(t), y = g(t)' },
+  { label: 'Integral', value: '∫ f(x) dx' },
+  { label: 'Derivada', value: 'dy/dx = f\'(x)' },
+];
 
 interface ToolbarProps {
   tool: Tool;
@@ -37,9 +50,12 @@ interface ToolbarProps {
   onZoomReset: () => void;
   onDeleteSelected: () => void;
   onToggleGrid: () => void;
+  onInsertFormula: (formula: string) => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
+  const [showMath, setShowMath] = useState(false);
+
   const btn = (active: boolean, onClick: () => void, icon: React.ReactNode, title: string) => (
     <button className={`toolbar-btn ${active ? 'active' : ''}`} onClick={onClick} title={title}>
       {icon}
@@ -99,6 +115,37 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         {btn(p.tool === 'line', () => p.onTool('line'), <Minus size={20} />, 'Línea (L)')}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.15)', margin: '2px 0' }} />
         {btn(p.tool === 'text', () => p.onTool('text'), <Type size={20} />, 'Texto (T)')}
+        <div style={{ position: 'relative' }}>
+          {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
+          {showMath && (
+            <div className="glass-panel" style={{
+              position: 'absolute', top: 0, left: '100%', marginLeft: 16,
+              width: 220, padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
+              maxHeight: 400, overflowY: 'auto'
+            }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, padding: '4px 8px', textTransform: 'uppercase' }}>
+                Fórmulas
+              </div>
+              {MATH_FORMULAS.map(f => (
+                <button 
+                  key={f.label}
+                  className="toolbar-btn" 
+                  style={{ width: '100%', justifyContent: 'flex-start', padding: '8px 12px', height: 'auto', textAlign: 'left', borderRadius: 6 }}
+                  onClick={() => {
+                    p.onInsertFormula(f.value);
+                    setShowMath(false);
+                    p.onTool('select');
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>{f.label}</span>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2, fontFamily: 'monospace' }}>{f.value}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Right properties panel */}

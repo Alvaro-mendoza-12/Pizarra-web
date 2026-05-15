@@ -22,7 +22,6 @@ function GridLines({ stageScale, stagePos }: { stageScale: number; stagePos: { x
   return <>{lines}</>;
 }
 
-// Wrap each element so hooks are always called at the top level
 interface ElementWrapperProps {
   el: BoardElement;
   isSelected: boolean;
@@ -58,7 +57,11 @@ function ElementWrapper({ el, isSelected, isDraggable, onSelect, onChange }: Ele
 }
 
 export default function Whiteboard() {
-  const { present: elements, push, undo, redo, canUndo, canRedo } = useHistory([]);
+  const [elements, setElements] = useState<BoardElement[]>([]);
+  const { pushHistory, undoHistory, redoHistory, clearHistory, canUndo, canRedo } = useHistory([]);
+
+  const undo = useCallback(() => setElements(undoHistory()), [undoHistory]);
+  const redo = useCallback(() => setElements(redoHistory()), [redoHistory]);
 
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#ffffff');
@@ -82,7 +85,6 @@ export default function Whiteboard() {
 
   const stageRef = useRef<any>(null);
 
-  // Focus textarea when opened
   useEffect(() => {
     if (textEditor) setTimeout(() => textareaRef.current?.focus(), 50);
   }, [textEditor]);
@@ -146,8 +148,8 @@ export default function Whiteboard() {
       newEl.x = 0; newEl.y = 0;
     }
 
-    push([...elements, newEl]);
-  }, [tool, color, strokeWidth, elements, push, getCanvasPos]);
+    setElements([...elements, newEl]);
+  }, [tool, color, strokeWidth, elements, getCanvasPos]);
 
   const handleMouseMove = useCallback(() => {
     if (tool === 'select' && marqueeStart.current) {
@@ -184,8 +186,8 @@ export default function Whiteboard() {
 
     const updated = [...elements];
     updated[updated.length - 1] = last;
-    push(updated);
-  }, [tool, isDrawing, elements, push, getCanvasPos]);
+    setElements(updated);
+  }, [tool, isDrawing, elements, getCanvasPos]);
 
   const handleMouseUp = useCallback(() => {
     if (tool === 'select' && marqueeStart.current) {
@@ -206,22 +208,42 @@ export default function Whiteboard() {
       isMarqueeActive.current = false;
       return;
     }
+    if (isDrawing) {
+      pushHistory(elements);
+    }
     setIsDrawing(false);
-  }, [tool, marquee, elements]);
+  }, [tool, marquee, elements, isDrawing, pushHistory]);
 
   const commitText = useCallback(() => {
     if (!textEditor) return;
     if (textValue.trim()) {
-      push([...elements, {
-        id: uuidv4(), type: 'text',
+      const newArr = [...elements, {
+        id: uuidv4(), type: 'text' as Tool,
         x: textEditor.canvasX, y: textEditor.canvasY,
         text: textValue, fill: color,
         fontSize, fontFamily: 'Inter, sans-serif', strokeWidth: 0,
-      }]);
+      }];
+      setElements(newArr);
+      pushHistory(newArr);
     }
     setTextEditor(null);
     setTextValue('');
-  }, [textEditor, textValue, elements, push, color, fontSize]);
+  }, [textEditor, textValue, elements, pushHistory, color, fontSize]);
+
+  const handleInsertFormula = useCallback((formula: string) => {
+    const stage = stageRef.current;
+    const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const x = (center.x - stagePos.x) / stageScale;
+    const y = (center.y - stagePos.y) / stageScale;
+
+    const newArr = [...elements, {
+      id: uuidv4(), type: 'text' as Tool,
+      x, y, text: formula, fill: color,
+      fontSize: fontSize * 1.5, fontFamily: 'monospace', strokeWidth: 0,
+    }];
+    setElements(newArr);
+    pushHistory(newArr);
+  }, [elements, stagePos, stageScale, color, fontSize, pushHistory]);
 
   const handleElementSelect = useCallback((el: BoardElement, e: any, additive: boolean) => {
     if (tool !== 'select') return;
@@ -239,21 +261,27 @@ export default function Whiteboard() {
     const dy = (attrs.y ?? el.y ?? 0) - (el.y ?? 0);
     const isMove = (Math.abs(dx) > 0 || Math.abs(dy) > 0) && selectedIds.length > 1;
 
+    let updated;
     if (isMove) {
-      push(elements.map(e =>
+      updated = elements.map(e =>
         e.id === id ? { ...e, ...attrs } :
         selectedIds.includes(e.id) ? { ...e, x: (e.x || 0) + dx, y: (e.y || 0) + dy } : e
-      ));
+      );
     } else {
-      push(elements.map(e => e.id === id ? { ...e, ...attrs } : e));
+      updated = elements.map(e => e.id === id ? { ...e, ...attrs } : e);
     }
-  }, [elements, push, selectedIds]);
+    
+    setElements(updated);
+    pushHistory(updated);
+  }, [elements, pushHistory, selectedIds]);
 
   const deleteSelected = useCallback(() => {
     if (!selectedIds.length) return;
-    push(elements.filter(e => !selectedIds.includes(e.id)));
+    const filtered = elements.filter(e => !selectedIds.includes(e.id));
+    setElements(filtered);
+    pushHistory(filtered);
     setSelectedIds([]);
-  }, [selectedIds, elements, push]);
+  }, [selectedIds, elements, pushHistory]);
 
   const zoom = useCallback((factor: number) => {
     const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -283,16 +311,17 @@ export default function Whiteboard() {
     const img = new window.Image();
     img.src = src;
     img.onload = () => {
-      push([...elements, {
-        id: uuidv4(), type: 'image', src,
+      const newArr = [...elements, {
+        id: uuidv4(), type: 'image' as Tool, src,
         x: -stagePos.x / stageScale + window.innerWidth / 2 / stageScale - img.width / 2,
         y: -stagePos.y / stageScale + window.innerHeight / 2 / stageScale - img.height / 2,
         width: img.width, height: img.height,
-      }]);
+      }];
+      setElements(newArr);
+      pushHistory(newArr);
     };
-  }, [elements, push, stagePos, stageScale]);
+  }, [elements, pushHistory, stagePos, stageScale]);
 
-  // Keyboard shortcuts + clipboard paste
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -329,7 +358,7 @@ export default function Whiteboard() {
   const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0f0f13', fontFamily: 'Inter, sans-serif', position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0f0f13', fontFamily: 'Inter, sans-serif', position: 'relative', touchAction: 'none' }}>
 
       <Toolbar
         tool={tool} color={color} strokeWidth={strokeWidth} fontSize={fontSize}
@@ -337,7 +366,7 @@ export default function Whiteboard() {
         selectedCount={selectedIds.length}
         onTool={setTool} onColor={setColor} onStroke={setStrokeWidth}
         onFontSize={setFontSize} onUndo={undo} onRedo={redo}
-        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) { push([]); setSelectedIds([]); } }}
+        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) { setElements([]); clearHistory([]); setSelectedIds([]); } }}
         onExport={() => {
           if (!stageRef.current) return;
           const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
@@ -352,6 +381,7 @@ export default function Whiteboard() {
         onZoomReset={() => { setStageScale(1); setStagePos({ x: 0, y: 0 }); }}
         onDeleteSelected={deleteSelected}
         onToggleGrid={() => setShowGrid(g => !g)}
+        onInsertFormula={handleInsertFormula}
       />
 
       {/* Inline text editor overlay */}
@@ -370,7 +400,7 @@ export default function Whiteboard() {
             left: textEditor.screenX, top: textEditor.screenY,
             minWidth: 140, minHeight: 44,
             background: 'rgba(18,18,24,0.92)',
-            border: '2px solid #818cf8',
+            border: `2px solid ${color}`,
             borderRadius: 10, color, outline: 'none', resize: 'both',
             fontSize: `${fontSize * stageScale}px`,
             fontFamily: 'Inter, sans-serif',
@@ -404,7 +434,6 @@ export default function Whiteboard() {
           {elements.map(el => {
             const isSel = selectedIds.includes(el.id);
             const isDraggable = isSel && tool === 'select';
-            // Show single-element transformer only when one element selected
             const showTransformer = isSel && selectedIds.length === 1;
             return (
               <ElementWrapper

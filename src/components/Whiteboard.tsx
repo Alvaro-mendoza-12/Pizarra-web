@@ -5,6 +5,7 @@ import type { BoardElement, Tool } from '../types';
 import { ShapeElement } from './ShapeElement';
 import { URLImage } from './URLImage';
 import { Toolbar } from './Toolbar';
+import { GraphFullscreen } from './GraphFullscreen';
 import { useHistory } from '../hooks/useHistory';
 
 const GRID_SIZE = 40;
@@ -92,9 +93,8 @@ export default function Whiteboard() {
   const [textValue, setTextValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Graph Modal
-  const [showGraphModal, setShowGraphModal] = useState<{ x: number, y: number, canvasX: number, canvasY: number } | null>(null);
-  const [graphInput, setGraphInput] = useState('sin(x)');
+  // Graph View (Full Screen)
+  const [isGraphViewOpen, setIsGraphViewOpen] = useState(false);
 
   const stageRef = useRef<any>(null);
   const trRef = useRef<any>(null);
@@ -427,6 +427,8 @@ export default function Whiteboard() {
         node.y(sPos.y + dy);
       }
     });
+    // Force transformer to update its box
+    if (trRef.current) trRef.current.getLayer()?.batchDraw();
   }, [selectedIds]);
 
   const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
@@ -456,14 +458,7 @@ export default function Whiteboard() {
         onDeleteSelected={deleteSelected}
         onToggleGrid={() => setShowGrid(g => !g)}
         onInsertFormula={handleInsertFormula}
-        onOpenGraphModal={() => {
-          setShowGraphModal({
-            x: window.innerWidth / 2 - 140,
-            y: window.innerHeight / 2 - 100,
-            canvasX: (window.innerWidth / 2 - stagePos.x) / stageScale,
-            canvasY: (window.innerHeight / 2 - stagePos.y) / stageScale,
-          });
-        }}
+        onOpenGraphModal={() => setIsGraphViewOpen(true)}
       />
 
       {/* Inline text editor overlay */}
@@ -494,96 +489,16 @@ export default function Whiteboard() {
         />
       )}
 
-      {showGraphModal && (
-        <div style={{
-          position: 'fixed', zIndex: 200,
-          left: showGraphModal.x, top: showGraphModal.y,
-          background: 'rgba(18,18,24,0.95)', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 12, padding: 16, color: 'white',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
-          display: 'flex', flexDirection: 'column', gap: 10, width: 280
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Graficador Matemático</span>
-            <button onClick={() => setShowGraphModal(null)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer' }}>✕</button>
-          </div>
-          <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.4 }}>
-            Ingresa una función matemática. Soporta:<br/>
-            - <b>Normal:</b> <code style={{ color: '#818cf8' }}>sin(x)</code> o <code style={{ color: '#818cf8' }}>x*x</code><br/>
-            - <b>Paramétrica:</b> <code style={{ color: '#818cf8' }}>cos(t),sin(t)</code><br/>
-            - <b>Polar:</b> <code style={{ color: '#818cf8' }}>r=cos(4*t)</code>
-          </div>
-          <input
-            autoFocus
-            type="text"
-            value={graphInput}
-            onChange={(e) => setGraphInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const fn = graphInput;
-                if (!fn) return;
-                const pts: number[] = [];
-                const SCALE = 40;
-                try {
-                  const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
-                                   .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
-                  
-                  if (safeFn.startsWith('r=')) {
-                    const expr = safeFn.slice(2);
-                    const evalFn = new Function('t', `return ${expr}`);
-                    for (let t = 0; t <= Math.PI * 4; t += 0.05) {
-                      const r = evalFn(t);
-                      if (!isNaN(r)) pts.push(showGraphModal.canvasX + r * Math.cos(t) * SCALE, showGraphModal.canvasY - r * Math.sin(t) * SCALE);
-                    }
-                  } else if (safeFn.includes(',')) {
-                    const parts = safeFn.split(',');
-                    const evalX = new Function('t', `return ${parts[0]}`);
-                    const evalY = new Function('t', `return ${parts[1]}`);
-                    for (let t = -10; t <= 10; t += 0.05) {
-                      const x = evalX(t);
-                      const y = evalY(t);
-                      if (!isNaN(x) && !isNaN(y)) pts.push(showGraphModal.canvasX + x * SCALE, showGraphModal.canvasY - y * SCALE);
-                    }
-                  } else {
-                    const evalFn = new Function('x', `return ${safeFn}`);
-                    for (let x = -10; x <= 10; x += 0.05) {
-                      const y = evalFn(x);
-                      if (!isNaN(y)) pts.push(showGraphModal.canvasX + x * SCALE, showGraphModal.canvasY - y * SCALE);
-                    }
-                  }
-
-                  const newEl: BoardElement = {
-                    id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: strokeWidth || 2
-                  };
-                  const updated = [...elements, newEl];
-                  setElements(updated);
-                  pushHistory(updated);
-                  setShowGraphModal(null);
-                  setTool('select');
-                } catch (err) { alert('Error de sintaxis.'); }
-              }
-            }}
-            style={{
-              background: 'rgba(0,0,0,0.5)', border: '1px solid #444',
-              color: 'white', padding: '8px 12px', borderRadius: 6,
-              fontFamily: 'monospace', outline: 'none'
-            }}
-            placeholder="Ej: sin(x)"
-          />
-          <button
-            onClick={() => {
-              const e = new KeyboardEvent('keydown', { key: 'Enter' });
-              // Small hack to trigger the logic above
-              document.activeElement?.dispatchEvent(e);
-            }}
-            style={{
-              background: '#4f46e5', color: 'white', border: 'none',
-              padding: '8px', borderRadius: 6, cursor: 'pointer', fontWeight: 500
-            }}
-          >
-            Graficar
-          </button>
-        </div>
+      {isGraphViewOpen && (
+        <GraphFullscreen 
+          onClose={() => setIsGraphViewOpen(false)}
+          onInsert={(newElements) => {
+            const updated = [...elements, ...newElements];
+            setElements(updated);
+            pushHistory(updated);
+            setIsGraphViewOpen(false);
+          }}
+        />
       )}
 
       <Stage

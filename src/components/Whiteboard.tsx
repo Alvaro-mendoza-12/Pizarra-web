@@ -231,7 +231,6 @@ export default function Whiteboard() {
   }, [textEditor, textValue, elements, pushHistory, color, fontSize]);
 
   const handleInsertFormula = useCallback((formula: string) => {
-    const stage = stageRef.current;
     const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     const x = (center.x - stagePos.x) / stageScale;
     const y = (center.y - stagePos.y) / stageScale;

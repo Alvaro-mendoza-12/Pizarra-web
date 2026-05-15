@@ -1,4 +1,3 @@
-import React from 'react';
 import Whiteboard from './components/Whiteboard';
 
 function App() {

@@ -301,24 +301,31 @@ export default function Whiteboard() {
   }, [tool]);
 
   const handleChange = useCallback((id: string, attrs: any) => {
-    const el = elements.find(e => e.id === id);
-    if (!el) return;
-    const dx = (attrs.x ?? el.x ?? 0) - (el.x ?? 0);
-    const dy = (attrs.y ?? el.y ?? 0) - (el.y ?? 0);
-    const isMove = (Math.abs(dx) > 0 || Math.abs(dy) > 0) && selectedIds.length > 1;
-
-    let updated;
-    if (isMove) {
-      updated = elements.map(e =>
-        e.id === id ? { ...e, ...attrs } :
-        selectedIds.includes(e.id) ? { ...e, x: (e.x || 0) + dx, y: (e.y || 0) + dy } : e
-      );
+    // If multiple elements are selected, we should update all of them based on their physical nodes
+    if (selectedIds.length > 1 && selectedIds.includes(id)) {
+      const updated = elements.map(e => {
+        if (selectedIds.includes(e.id)) {
+          const node = nodeRefs.current[e.id];
+          if (node) {
+            return {
+              ...e,
+              x: node.x(),
+              y: node.y(),
+              // If the change came from a transform, we'd have rotation/scale here too,
+              // but for simple dragging, x/y is enough.
+              ...(e.id === id ? attrs : {})
+            };
+          }
+        }
+        return e;
+      });
+      setElements(updated);
+      pushHistory(updated);
     } else {
-      updated = elements.map(e => e.id === id ? { ...e, ...attrs } : e);
+      const updated = elements.map(e => e.id === id ? { ...e, ...attrs } : e);
+      setElements(updated);
+      pushHistory(updated);
     }
-    
-    setElements(updated);
-    pushHistory(updated);
   }, [elements, pushHistory, selectedIds]);
 
   const deleteSelected = useCallback(() => {

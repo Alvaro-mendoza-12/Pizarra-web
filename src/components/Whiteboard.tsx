@@ -129,25 +129,46 @@ export default function Whiteboard() {
     }
 
     if (tool === 'graph') {
-      const fn = prompt('Introduce la función (ej: sin(x), x*x, Math.sqrt(x)):', 'sin(x)');
+      const fn = prompt('Función (ej: sin(x) | Paramétrica: cos(t),sin(t) | Polar: r=cos(4*t)):', 'sin(x)');
       if (!fn) return;
       const canvasPos = getCanvasPos();
       const pts: number[] = [];
+      const SCALE = 40;
       try {
-        // Simple evaluator for graphing
-        const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan').replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
-        for (let x = -200; x <= 200; x += 2) {
-          const context = { x: x / 20 };
-          const y = new Function('x', `return ${safeFn}`)(context.x);
-          if (!isNaN(y)) pts.push(canvasPos.x + x, canvasPos.y - y * 20);
+        const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
+                         .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
+        
+        if (safeFn.startsWith('r=')) {
+          const expr = safeFn.slice(2);
+          const evalFn = new Function('t', `return ${expr}`);
+          for (let t = 0; t <= Math.PI * 4; t += 0.05) {
+            const r = evalFn(t);
+            if (!isNaN(r)) pts.push(canvasPos.x + r * Math.cos(t) * SCALE, canvasPos.y - r * Math.sin(t) * SCALE);
+          }
+        } else if (safeFn.includes(',')) {
+          const parts = safeFn.split(',');
+          const evalX = new Function('t', `return ${parts[0]}`);
+          const evalY = new Function('t', `return ${parts[1]}`);
+          for (let t = -10; t <= 10; t += 0.05) {
+            const x = evalX(t);
+            const y = evalY(t);
+            if (!isNaN(x) && !isNaN(y)) pts.push(canvasPos.x + x * SCALE, canvasPos.y - y * SCALE);
+          }
+        } else {
+          const evalFn = new Function('x', `return ${safeFn}`);
+          for (let x = -10; x <= 10; x += 0.05) {
+            const y = evalFn(x);
+            if (!isNaN(y)) pts.push(canvasPos.x + x * SCALE, canvasPos.y - y * SCALE);
+          }
         }
+
         const newEl: BoardElement = {
-          id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: 2
+          id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: strokeWidth || 2
         };
         const updated = [...elements, newEl];
         setElements(updated);
         pushHistory(updated);
-      } catch (e) { alert('Error en la función'); }
+      } catch (e) { alert('Error de sintaxis. Usa variables "x" o "t". Ej: 2*x'); }
       return;
     }
 
@@ -219,14 +240,31 @@ export default function Whiteboard() {
   const handleMouseUp = useCallback(() => {
     if (tool === 'select' && marqueeStart.current) {
       if (isMarqueeActive.current && marquee) {
-        const { x, y, w, h } = marquee;
+        const mx1 = marquee.x, my1 = marquee.y, mx2 = marquee.x + marquee.w, my2 = marquee.y + marquee.h;
         const selected = elements.filter(el => {
-          if (el.type === 'pen' || el.type === 'eraser' || el.type === 'line') {
+          let minX, minY, maxX, maxY;
+          if (el.type === 'pen' || el.type === 'eraser' || el.type === 'line' || el.type === 'arrow') {
             const pts = el.points || [];
-            return pts.some((_, i) => i % 2 === 0 && i + 1 < pts.length && pts[i] >= x && pts[i] <= x + w && pts[i + 1] >= y && pts[i + 1] <= y + h);
+            if (!pts.length) return false;
+            minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
+            for (let i = 0; i < pts.length; i += 2) {
+              if (pts[i] < minX) minX = pts[i];
+              if (pts[i] > maxX) maxX = pts[i];
+              if (pts[i+1] < minY) minY = pts[i+1];
+              if (pts[i+1] > maxY) maxY = pts[i+1];
+            }
+          } else if (el.type === 'text') {
+            minX = el.x || 0; minY = el.y || 0;
+            maxX = minX + 150; maxY = minY + (el.fontSize || 22) * 2;
+          } else {
+            const x1 = el.x || 0;
+            const x2 = x1 + (el.width || 0);
+            minX = Math.min(x1, x2); maxX = Math.max(x1, x2);
+            const y1 = el.y || 0;
+            const y2 = y1 + (el.height || 0);
+            minY = Math.min(y1, y2); maxY = Math.max(y1, y2);
           }
-          const ex = el.x || 0, ey = el.y || 0;
-          return ex + (el.width || 0) >= x && ex <= x + w && ey + (el.height || 0) >= y && ey <= y + h;
+          return !(maxX < mx1 || minX > mx2 || maxY < my1 || minY > my2);
         }).map(el => el.id);
         if (selected.length > 0) setSelectedIds(selected);
       }

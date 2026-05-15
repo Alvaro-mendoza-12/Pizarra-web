@@ -83,6 +83,7 @@ export const ShapeElement = ({ shapeProps, isSelected, onSelect, onChange, dragg
       {shapeProps.type === 'arrow' && (
         <Arrow
           {...commonProps}
+          points={shapeProps.points || []}
           pointerLength={10}
           pointerWidth={10}
           fill={shapeProps.stroke}

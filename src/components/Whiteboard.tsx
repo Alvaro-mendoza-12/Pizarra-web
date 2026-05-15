@@ -128,6 +128,29 @@ export default function Whiteboard() {
       return;
     }
 
+    if (tool === 'graph') {
+      const fn = prompt('Introduce la función (ej: sin(x), x*x, Math.sqrt(x)):', 'sin(x)');
+      if (!fn) return;
+      const canvasPos = getCanvasPos();
+      const pts: number[] = [];
+      try {
+        // Simple evaluator for graphing
+        const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan').replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
+        for (let x = -200; x <= 200; x += 2) {
+          const context = { x: x / 20 };
+          const y = new Function('x', `return ${safeFn}`)(context.x);
+          if (!isNaN(y)) pts.push(canvasPos.x + x, canvasPos.y - y * 20);
+        }
+        const newEl: BoardElement = {
+          id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: 2
+        };
+        const updated = [...elements, newEl];
+        setElements(updated);
+        pushHistory(updated);
+      } catch (e) { alert('Error en la función'); }
+      return;
+    }
+
     setIsDrawing(true);
     setSelectedIds([]);
     const pos = getCanvasPos();
@@ -143,13 +166,17 @@ export default function Whiteboard() {
       fill: (tool === 'rect' || tool === 'circle') ? 'transparent' : undefined,
     };
 
-    if (tool === 'pen' || tool === 'eraser' || tool === 'line') {
-      newEl.points = [pos.x, pos.y];
+    if (tool === 'pen' || tool === 'eraser' || tool === 'line' || tool === 'arrow') {
+      newEl.points = [pos.x, pos.y, pos.x, pos.y];
       newEl.x = 0; newEl.y = 0;
+    }
+    
+    if (tool === 'axis') {
+      newEl.width = 0; newEl.height = 0; // Fixed size in component
     }
 
     setElements([...elements, newEl]);
-  }, [tool, color, strokeWidth, elements, getCanvasPos]);
+  }, [tool, color, strokeWidth, elements, getCanvasPos, pushHistory]);
 
   const handleMouseMove = useCallback(() => {
     if (tool === 'select' && marqueeStart.current) {
@@ -171,8 +198,8 @@ export default function Whiteboard() {
 
     if (tool === 'pen' || tool === 'eraser') {
       last.points = [...(last.points || []), pos.x, pos.y];
-    } else if (tool === 'line') {
-      const pts = last.points || [0, 0];
+    } else if (tool === 'line' || tool === 'arrow') {
+      const pts = last.points || [pos.x, pos.y];
       last.points = [pts[0], pts[1], pos.x, pos.y];
     } else if (tool === 'rect') {
       last.width = pos.x - (last.x || 0);

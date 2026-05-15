@@ -1,4 +1,4 @@
-export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'image';
+export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'image' | 'arrow' | 'axis' | 'graph';
 
 export interface BoardElement {
   id: string;

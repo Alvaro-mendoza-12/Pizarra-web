@@ -27,15 +27,20 @@ export const URLImage = ({ imageSrc, shapeProps, isSelected, onSelect, onChange,
     <React.Fragment>
       <KonvaImage
         image={img}
-        onClick={(e: any) => onSelect(e, e.evt.shiftKey)}
-        onTap={(e: any) => onSelect(e, false)}
+        onClick={(e: any) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); }}
+        onTap={(e: any) => { e.cancelBubble = true; onSelect(e, false); }}
         ref={imageRef}
         {...shapeProps}
         draggable={draggable}
+        onDragStart={(e: any) => { e.cancelBubble = true; }}
+        onDragMove={(e: any) => { e.cancelBubble = true; }}
         onDragEnd={(e: any) => {
+          e.cancelBubble = true;
           onChange({ ...shapeProps, x: e.target.x(), y: e.target.y() });
         }}
-        onTransformEnd={() => {
+        onTransformStart={(e: any) => { e.cancelBubble = true; }}
+        onTransformEnd={(e: any) => {
+          e.cancelBubble = true;
           const node = imageRef.current;
           const scaleX = node.scaleX();
           const scaleY = node.scaleY();
@@ -45,8 +50,8 @@ export const URLImage = ({ imageSrc, shapeProps, isSelected, onSelect, onChange,
             ...shapeProps,
             x: node.x(),
             y: node.y(),
-            width: Math.max(5, node.width() * scaleX),
-            height: Math.max(5, node.height() * scaleY),
+            width: Math.max(5, (node.width() || 0) * scaleX),
+            height: Math.max(5, (node.height() || 0) * scaleY),
             rotation: node.rotation(),
           });
         }}

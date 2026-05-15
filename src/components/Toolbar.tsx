@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   MousePointer2, Pen, Eraser, Square, Circle as CircleIcon,
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
-  ZoomIn, ZoomOut, RotateCcw, Grid, Sigma
+  ZoomIn, ZoomOut, RotateCcw, Grid, Sigma, ArrowUpRight, Plus, Activity
 } from 'lucide-react';
 import type { Tool } from '../types';
 
@@ -119,8 +119,11 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         {btn(p.tool === 'rect', () => p.onTool('rect'), <Square size={20} />, 'Rectángulo (R)')}
         {btn(p.tool === 'circle', () => p.onTool('circle'), <CircleIcon size={20} />, 'Círculo (C)')}
         {btn(p.tool === 'line', () => p.onTool('line'), <Minus size={20} />, 'Línea (L)')}
+        {btn(p.tool === 'arrow', () => p.onTool('arrow'), <ArrowUpRight size={20} />, 'Flecha')}
+        {btn(p.tool === 'axis', () => p.onTool('axis'), <Plus size={20} />, 'Ejes Cartesianos')}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.15)', margin: '2px 0' }} />
         {btn(p.tool === 'text', () => p.onTool('text'), <Type size={20} />, 'Texto (T)')}
+        {btn(p.tool === 'graph', () => p.onTool('graph'), <Activity size={20} />, 'Graficador Función')}
         <div style={{ position: 'relative' }}>
           {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
           {showMath && (

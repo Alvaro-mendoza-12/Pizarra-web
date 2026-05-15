@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Rect, Circle, Line, Text, Transformer } from 'react-konva';
+import { Rect, Circle, Line, Text, Transformer, Arrow, Group } from 'react-konva';
 import type { BoardElement } from '../types';
 
 interface ShapeElementProps {
@@ -22,10 +22,12 @@ export const ShapeElement = ({ shapeProps, isSelected, onSelect, onChange, dragg
   }, [isSelected, shapeProps.type]);
 
   const handleDragEnd = (e: any) => {
+    e.cancelBubble = true;
     onChange({ ...shapeProps, x: e.target.x(), y: e.target.y() });
   };
 
-  const handleTransformEnd = () => {
+  const handleTransformEnd = (e: any) => {
+    e.cancelBubble = true;
     const node = shapeRef.current;
     if (!node) return;
     const scaleX = node.scaleX();
@@ -36,19 +38,22 @@ export const ShapeElement = ({ shapeProps, isSelected, onSelect, onChange, dragg
       ...shapeProps,
       x: node.x(),
       y: node.y(),
-      width: Math.max(5, node.width() * scaleX),
-      height: Math.max(5, node.height() * scaleY),
+      width: Math.max(5, (node.width() || 0) * scaleX),
+      height: Math.max(5, (node.height() || 0) * scaleY),
       rotation: node.rotation(),
     });
   };
 
   const commonProps = {
-    onClick: (e: any) => onSelect(e, e.evt.shiftKey),
-    onTap: (e: any) => onSelect(e, false),
+    onClick: (e: any) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); },
+    onTap: (e: any) => { e.cancelBubble = true; onSelect(e, false); },
     ref: shapeRef,
     ...shapeProps,
     draggable,
+    onDragStart: (e: any) => { e.cancelBubble = true; },
+    onDragMove: (e: any) => { e.cancelBubble = true; },
     onDragEnd: handleDragEnd,
+    onTransformStart: (e: any) => { e.cancelBubble = true; },
     onTransformEnd: handleTransformEnd,
   };
 
@@ -74,6 +79,38 @@ export const ShapeElement = ({ shapeProps, isSelected, onSelect, onChange, dragg
           globalCompositeOperation={shapeProps.type === 'eraser' ? 'destination-out' : 'source-over'}
           hitStrokeWidth={Math.max(20, shapeProps.strokeWidth || 5)}
         />
+      )}
+      {shapeProps.type === 'arrow' && (
+        <Arrow
+          {...commonProps}
+          pointerLength={10}
+          pointerWidth={10}
+          fill={shapeProps.stroke}
+          lineCap="round"
+          lineJoin="round"
+        />
+      )}
+      {shapeProps.type === 'axis' && (
+        <Group {...commonProps}>
+          <Arrow
+            points={[-100, 0, 100, 0]}
+            stroke={shapeProps.stroke}
+            strokeWidth={shapeProps.strokeWidth}
+            pointerLength={10}
+            pointerWidth={10}
+            fill={shapeProps.stroke}
+          />
+          <Arrow
+            points={[0, 100, 0, -100]}
+            stroke={shapeProps.stroke}
+            strokeWidth={shapeProps.strokeWidth}
+            pointerLength={10}
+            pointerWidth={10}
+            fill={shapeProps.stroke}
+          />
+          <Text text="X" x={105} y={-5} fill={shapeProps.stroke} fontSize={14} />
+          <Text text="Y" x={-5} y={-115} fill={shapeProps.stroke} fontSize={14} />
+        </Group>
       )}
       {shapeProps.type === 'text' && (
         <Text

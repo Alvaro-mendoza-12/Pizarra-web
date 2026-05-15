@@ -28,11 +28,15 @@ interface ElementWrapperProps {
   onSelect: (el: BoardElement, e: any, additive: boolean) => void;
   onChange: (id: string, attrs: any) => void;
   onNode: (id: string, node: any) => void;
+  onDragStart: (id: string) => void;
+  onDragMove: (id: string, e: any) => void;
 }
-function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode }: ElementWrapperProps) {
+function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode, onDragStart, onDragMove }: ElementWrapperProps) {
   const handleSelect = useCallback((e: any, additive: boolean) => onSelect(el, e, additive), [el, onSelect]);
   const handleChange = useCallback((attrs: any) => onChange(el.id, attrs), [el.id, onChange]);
   const handleNode = useCallback((node: any) => onNode(el.id, node), [el.id, onNode]);
+  const handleDragStart = useCallback(() => onDragStart(el.id), [el.id, onDragStart]);
+  const handleDragMove = useCallback((e: any) => onDragMove(el.id, e), [el.id, onDragMove]);
 
   if (el.type === 'image') {
     return (
@@ -43,6 +47,8 @@ function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode }: Element
         onSelect={handleSelect}
         onChange={handleChange}
         onNode={handleNode}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
       />
     );
   }
@@ -53,6 +59,8 @@ function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode }: Element
       onSelect={handleSelect}
       onChange={handleChange}
       onNode={handleNode}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
     />
   );
 }
@@ -408,6 +416,34 @@ export default function Whiteboard() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('paste', onPaste); };
   }, [deleteSelected, undo, redo, addImage, zoom]);
 
+  const dragStartPositions = useRef<{ [key: string]: { x: number, y: number } }>({});
+
+  const handleNodeDragStart = useCallback((id: string) => {
+    if (!selectedIds.includes(id)) return;
+    selectedIds.forEach(sid => {
+      const node = nodeRefs.current[sid];
+      if (node) dragStartPositions.current[sid] = { x: node.x(), y: node.y() };
+    });
+  }, [selectedIds]);
+
+  const handleNodeDragMove = useCallback((id: string, e: any) => {
+    if (selectedIds.length <= 1 || !selectedIds.includes(id)) return;
+    const startPos = dragStartPositions.current[id];
+    if (!startPos) return;
+    const dx = e.target.x() - startPos.x;
+    const dy = e.target.y() - startPos.y;
+
+    selectedIds.forEach(sid => {
+      if (sid === id) return;
+      const node = nodeRefs.current[sid];
+      const sPos = dragStartPositions.current[sid];
+      if (node && sPos) {
+        node.x(sPos.x + dx);
+        node.y(sPos.y + dy);
+      }
+    });
+  }, [selectedIds]);
+
   const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
 
   return (
@@ -590,6 +626,8 @@ export default function Whiteboard() {
                   if (node) nodeRefs.current[id] = node;
                   else delete nodeRefs.current[id];
                 }}
+                onDragStart={handleNodeDragStart}
+                onDragMove={handleNodeDragMove}
               />
             );
           })}

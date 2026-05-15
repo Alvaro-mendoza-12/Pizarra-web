@@ -8,9 +8,11 @@ interface ShapeElementProps {
   onChange: (newAttrs: any) => void;
   draggable?: boolean;
   onNode?: (node: any) => void;
+  onDragStart?: (e: any) => void;
+  onDragMove?: (e: any) => void;
 }
 
-export const ShapeElement = ({ shapeProps, onSelect, onChange, draggable = false, onNode }: ShapeElementProps) => {
+export const ShapeElement = ({ shapeProps, onSelect, onChange, draggable = false, onNode, onDragStart, onDragMove }: ShapeElementProps) => {
 
   const handleDragEnd = (e: any) => {
     e.cancelBubble = true;
@@ -23,8 +25,8 @@ export const ShapeElement = ({ shapeProps, onSelect, onChange, draggable = false
     ref: onNode,
     ...shapeProps,
     draggable,
-    onDragStart: (e: any) => { e.cancelBubble = true; },
-    onDragMove: (e: any) => { e.cancelBubble = true; },
+    onDragStart: (e: any) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); },
+    onDragMove: (e: any) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); },
     onDragEnd: handleDragEnd,
     onTransformStart: (e: any) => { e.cancelBubble = true; },
   };

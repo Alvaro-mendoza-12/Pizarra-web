@@ -183,9 +183,9 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
               <div key={w} style={{
                 height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', background: p.strokeWidth === w ? 'rgba(99,102,241,0.25)' : 'transparent',
-                borderRadius: 6, border: p.strokeWidth === w ? '1px solid rgba(99,102,241,0.5)' : '1px solid transparent'
+                borderRadius: 6, border: p.strokeWidth === w ? '1px solid rgba(99,102,241,0.8)' : '1px solid transparent'
               }} onClick={() => p.onStroke(w)}>
-                <div style={{ width: '75%', height: w, backgroundColor: '#fff', borderRadius: w }} />
+                <div style={{ width: '75%', height: w, backgroundColor: p.strokeWidth === w ? p.color : '#fff', borderRadius: w }} />
               </div>
             ))}
           </div>

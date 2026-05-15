@@ -9,9 +9,11 @@ interface URLImageProps {
   onChange: (newAttrs: any) => void;
   draggable?: boolean;
   onNode?: (node: any) => void;
+  onDragStart?: (e: any) => void;
+  onDragMove?: (e: any) => void;
 }
 
-export const URLImage = ({ imageSrc, shapeProps, onSelect, onChange, draggable = false, onNode }: URLImageProps) => {
+export const URLImage = ({ imageSrc, shapeProps, onSelect, onChange, draggable = false, onNode, onDragStart, onDragMove }: URLImageProps) => {
   const [img] = useImage(imageSrc);
 
   return (
@@ -23,8 +25,8 @@ export const URLImage = ({ imageSrc, shapeProps, onSelect, onChange, draggable =
         ref={onNode}
         {...shapeProps}
         draggable={draggable}
-        onDragStart={(e: any) => { e.cancelBubble = true; }}
-        onDragMove={(e: any) => { e.cancelBubble = true; }}
+        onDragStart={(e: any) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); }}
+        onDragMove={(e: any) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); }}
         onDragEnd={(e: any) => {
           e.cancelBubble = true;
           onChange({ ...shapeProps, x: e.target.x(), y: e.target.y() });

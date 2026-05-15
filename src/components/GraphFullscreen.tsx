@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Stage, Layer, Line, Text } from 'react-konva';
+import { Stage, Layer, Line, Text, Group } from 'react-konva';
 import { Plus, Trash2, Check, ArrowLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -17,9 +17,10 @@ interface GraphFullscreenProps {
 
 export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onInsert }) => {
   const [functions, setFunctions] = useState<FunctionItem[]>([
-    { id: '1', expression: 'sin(x)', color: '#818cf8', visible: true }
+    { id: '1', expression: 'x^2 + y^2 = 25', color: '#818cf8', visible: true }
   ]);
   const [viewport, setViewport] = useState({ x: window.innerWidth / 2 + 100, y: window.innerHeight / 2, scale: 40 });
+  const [is3D, setIs3D] = useState(false);
 
   const addFunction = () => {
     setFunctions([...functions, { id: uuidv4(), expression: '', color: '#' + Math.floor(Math.random()*16777215).toString(16), visible: true }]);
@@ -40,62 +41,84 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
   const plotData = useMemo(() => {
     return functions.filter(f => f.visible && f.expression).map(f => {
       const pts: number[] = [];
-      // Clean expression: remove "f(x)=" or "y="
-      let rawExpr = f.expression.toLowerCase().replace(/^(f\(x\)|y)\s*=\s*/, '');
+      const exprRaw = f.expression.toLowerCase().replace(/^(f\(x\)|y)\s*=\s*/, '');
       
-      // Basic math transformations
-      let expr = rawExpr
-        .replace(/\^/g, '**') // Power
-        .replace(/(\d)(x)/g, '$1*$2') // 2x -> 2*x
-        .replace(/(\))(\()/g, '$1*$2') // )( -> )*(
-        .replace(/(\d)(\()/g, '$1*$2') // 2( -> 2*(
-        .replace(/(x)(\()/g, '$1*$2') // x( -> x*(
-        .replace(/(\))(x)/g, '$1*$2') // )x -> )*x
+      const prepareExpr = (raw: string) => raw
+        .replace(/\^/g, '**')
+        .replace(/(\d)([a-z\(])/g, '$1*$2')
+        .replace(/([a-z\)])(\d)/g, '$1*$2')
+        .replace(/([a-z\)])([a-z\(])/g, '$1*$2')
         .replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
         .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/pi/g, 'Math.PI')
         .replace(/abs/g, 'Math.abs').replace(/exp/g, 'Math.exp').replace(/log/g, 'Math.log');
-      
+
       try {
-        if (expr.startsWith('r=')) {
-          const evalFn = new Function('t', `return ${expr.slice(2).replace(/t/g, '(t)')}`);
+        if (exprRaw.includes('=') && !exprRaw.startsWith('r=')) {
+          // Implicit equation (e.g., x^2 + y^2 = 25)
+          const [leftSide, rightSide] = exprRaw.split('=').map(prepareExpr);
+          const evalFn = new Function('x', 'y', `return (${leftSide}) - (${rightSide})`);
+          
+          const step = 0.15;
+          const range = 15;
+          for (let x = -range; x <= range; x += step) {
+            for (let y = -range; y <= range; y += step) {
+              const val = evalFn(x, y);
+              if (Math.abs(val) < 0.4) {
+                pts.push(x * viewport.scale, -y * viewport.scale);
+              }
+            }
+          }
+        } else if (exprRaw.startsWith('r=')) {
+          const expr = prepareExpr(exprRaw.slice(2));
+          const evalFn = new Function('t', `return ${expr}`);
           for (let t = 0; t <= Math.PI * 4; t += 0.02) {
             const r = evalFn(t);
             if (!isNaN(r)) pts.push(r * Math.cos(t) * viewport.scale, -r * Math.sin(t) * viewport.scale);
           }
-        } else if (expr.includes(',')) {
-          const parts = expr.split(',');
-          const evalX = new Function('t', `return ${parts[0].replace(/t/g, '(t)')}`);
-          const evalY = new Function('t', `return ${parts[1].replace(/t/g, '(t)')}`);
+        } else if (exprRaw.includes(',')) {
+          const parts = exprRaw.split(',').map(prepareExpr);
+          const evalX = new Function('t', `return ${parts[0]}`);
+          const evalY = new Function('t', `return ${parts[1]}`);
           for (let t = -10; t <= 10; t += 0.02) {
             const x = evalX(t); const y = evalY(t);
             if (!isNaN(x) && !isNaN(y)) pts.push(x * viewport.scale, -y * viewport.scale);
           }
         } else {
+          const expr = prepareExpr(exprRaw);
           const evalFn = new Function('x', `return ${expr}`);
-          // Increased range and density for better graphing
           for (let x = -50; x <= 50; x += 0.05) {
             const y = evalFn(x);
             if (!isNaN(y) && Math.abs(y) < 1000) pts.push(x * viewport.scale, -y * viewport.scale);
           }
         }
-      } catch (e) {
-        console.error("Math Error:", e);
-      }
+      } catch (e) { console.error(e); }
       return { id: f.id, points: pts, color: f.color };
     });
   }, [functions, viewport.scale]);
 
   const handleInsert = () => {
-    const elements = plotData.map(d => ({
-      id: uuidv4(),
-      type: 'pen',
-      x: 0,
-      y: 0,
-      points: d.points,
-      stroke: d.color,
-      strokeWidth: 2
-    }));
-    onInsert(elements);
+    const elementsToInsert = plotData.filter(d => d.points.length > 0).map(d => {
+      let minX = Infinity, minY = Infinity;
+      for(let i=0; i<d.points.length; i+=2) {
+        minX = Math.min(minX, d.points[i]);
+        minY = Math.min(minY, d.points[i+1]);
+      }
+      
+      if (minX === Infinity) return null;
+
+      const relativePoints = d.points.map((p, i) => i % 2 === 0 ? p - minX : p - minY);
+
+      return {
+        id: uuidv4(),
+        type: 'pen',
+        x: minX,
+        y: minY,
+        points: relativePoints,
+        stroke: d.color,
+        strokeWidth: 3
+      };
+    }).filter(e => e !== null);
+    onInsert(elementsToInsert as any[]);
   };
 
   const gridLines = useMemo(() => {
@@ -195,14 +218,42 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
         >
           <Layer>
             {gridLines}
+            {is3D && (
+              <Group>
+                {/* 3D Z Axis */}
+                <Line points={[0, 0, -500, -500]} stroke="#f43f5e" strokeWidth={2} dash={[10, 5]} />
+                <Text text="Z" x={-520} y={-520} fill="#f43f5e" fontSize={14} fontWeight="bold" />
+              </Group>
+            )}
             {plotData.map(d => (
-              <Line key={d.id} points={d.points} stroke={d.color} strokeWidth={3} tension={0.5} lineCap="round" lineJoin="round" />
+              <Line 
+                key={d.id} 
+                points={d.points} 
+                stroke={d.color} 
+                strokeWidth={3} 
+                tension={d.points.length > 500 ? 0 : 0.5} 
+                lineCap="round" 
+                lineJoin="round"
+                opacity={0.9}
+              />
             ))}
           </Layer>
         </Stage>
         
         {/* Controls Overlay */}
         <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 10 }}>
+          <button 
+            onClick={() => setIs3D(!is3D)}
+            style={{ 
+              background: is3D ? '#f43f5e' : 'rgba(25,25,35,0.8)', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              color: '#fff', padding: '8px 16px', borderRadius: 10, 
+              cursor: 'pointer', fontSize: 13, fontWeight: 700, backdropFilter: 'blur(10px)',
+              transition: 'all 0.2s'
+            }}
+          >
+            {is3D ? 'Modo 2D' : 'Modo 3D (Ejes)'}
+          </button>
           <button 
             onClick={() => setViewport({ x: (window.innerWidth - 350) / 2, y: window.innerHeight / 2, scale: 40 })}
             style={{ background: 'rgba(25,25,35,0.8)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 500, backdropFilter: 'blur(10px)' }}

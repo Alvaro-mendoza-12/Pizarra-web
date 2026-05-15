@@ -301,20 +301,22 @@ export default function Whiteboard() {
   }, [tool]);
 
   const handleChange = useCallback((id: string, attrs: any) => {
-    // If multiple elements are selected, we should update all of them based on their physical nodes
+    const el = elements.find(e => e.id === id);
+    if (!el) return;
+
+    // Calculate displacement delta from the primary element
+    const dx = (attrs.x !== undefined ? attrs.x : el.x || 0) - (el.x || 0);
+    const dy = (attrs.y !== undefined ? attrs.y : el.y || 0) - (el.y || 0);
+
     if (selectedIds.length > 1 && selectedIds.includes(id)) {
       const updated = elements.map(e => {
         if (selectedIds.includes(e.id)) {
+          if (e.id === id) return { ...e, ...attrs, x: Math.round((attrs.x ?? e.x) * 10) / 10, y: Math.round((attrs.y ?? e.y) * 10) / 10 };
           const node = nodeRefs.current[e.id];
           if (node) {
-            return {
-              ...e,
-              x: node.x(),
-              y: node.y(),
-              // If the change came from a transform, we'd have rotation/scale here too,
-              // but for simple dragging, x/y is enough.
-              ...(e.id === id ? attrs : {})
-            };
+            return { ...e, x: Math.round(node.x() * 10) / 10, y: Math.round(node.y() * 10) / 10 };
+          } else {
+            return { ...e, x: Math.round(((e.x || 0) + dx) * 10) / 10, y: Math.round(((e.y || 0) + dy) * 10) / 10 };
           }
         }
         return e;
@@ -322,7 +324,10 @@ export default function Whiteboard() {
       setElements(updated);
       pushHistory(updated);
     } else {
-      const updated = elements.map(e => e.id === id ? { ...e, ...attrs } : e);
+      const roundedAttrs = { ...attrs };
+      if (roundedAttrs.x !== undefined) roundedAttrs.x = Math.round(roundedAttrs.x * 10) / 10;
+      if (roundedAttrs.y !== undefined) roundedAttrs.y = Math.round(roundedAttrs.y * 10) / 10;
+      const updated = elements.map(e => e.id === id ? { ...e, ...roundedAttrs } : e);
       setElements(updated);
       pushHistory(updated);
     }

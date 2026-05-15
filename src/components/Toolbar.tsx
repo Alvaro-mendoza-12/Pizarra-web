@@ -105,11 +105,13 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         </label>
       </div>
 
-      {/* Left tool bar */}
+      {/* Barra Izquierda */}
       <div className="glass-panel" style={{
-        position: 'absolute', top: '50%', left: 16, transform: 'translateY(-50%)',
-        zIndex: 10, display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 8px'
+        position: 'absolute', top: '50%', left: 20, transform: 'translateY(-50%)',
+        display: 'flex', flexDirection: 'column', gap: 8, padding: 12, zIndex: 100,
+        maxHeight: '90vh', overflowY: 'auto', scrollbarWidth: 'none'
       }}>
+        <style>{`.glass-panel::-webkit-scrollbar { display: none; }`}</style>
         {btn(p.tool === 'select', () => p.onTool('select'), <MousePointer2 size={20} />, 'Seleccionar (V)')}
         {btn(p.tool === 'pan', () => p.onTool('pan'), <Hand size={20} />, 'Mover lienzo (Space)')}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.15)', margin: '2px 0' }} />

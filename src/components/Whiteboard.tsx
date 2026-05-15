@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Stage, Layer, Rect as KonvaRect, Line } from 'react-konva';
+import { Stage, Layer, Rect as KonvaRect, Line, Transformer } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import type { BoardElement, Tool } from '../types';
 import { ShapeElement } from './ShapeElement';
@@ -24,34 +24,35 @@ function GridLines({ stageScale, stagePos }: { stageScale: number; stagePos: { x
 
 interface ElementWrapperProps {
   el: BoardElement;
-  isSelected: boolean;
   isDraggable: boolean;
   onSelect: (el: BoardElement, e: any, additive: boolean) => void;
   onChange: (id: string, attrs: any) => void;
+  onNode: (id: string, node: any) => void;
 }
-function ElementWrapper({ el, isSelected, isDraggable, onSelect, onChange }: ElementWrapperProps) {
+function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode }: ElementWrapperProps) {
   const handleSelect = useCallback((e: any, additive: boolean) => onSelect(el, e, additive), [el, onSelect]);
   const handleChange = useCallback((attrs: any) => onChange(el.id, attrs), [el.id, onChange]);
+  const handleNode = useCallback((node: any) => onNode(el.id, node), [el.id, onNode]);
 
   if (el.type === 'image') {
     return (
       <URLImage
         imageSrc={el.src!}
         shapeProps={{ ...el, id: el.id }}
-        isSelected={isSelected}
         draggable={isDraggable}
         onSelect={handleSelect}
         onChange={handleChange}
+        onNode={handleNode}
       />
     );
   }
   return (
     <ShapeElement
       shapeProps={{ ...el, id: el.id }}
-      isSelected={isSelected}
       draggable={isDraggable}
       onSelect={handleSelect}
       onChange={handleChange}
+      onNode={handleNode}
     />
   );
 }
@@ -83,7 +84,24 @@ export default function Whiteboard() {
   const [textValue, setTextValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Graph Modal
+  const [showGraphModal, setShowGraphModal] = useState<{ x: number, y: number, canvasX: number, canvasY: number } | null>(null);
+  const [graphInput, setGraphInput] = useState('sin(x)');
+
   const stageRef = useRef<any>(null);
+  const trRef = useRef<any>(null);
+  const nodeRefs = useRef<{ [key: string]: any }>({});
+
+  useEffect(() => {
+    if (selectedIds.length > 0 && trRef.current) {
+      const nodes = selectedIds.map(id => nodeRefs.current[id]).filter(Boolean);
+      trRef.current.nodes(nodes);
+      trRef.current.getLayer().batchDraw();
+    } else if (trRef.current) {
+      trRef.current.nodes([]);
+      trRef.current.getLayer().batchDraw();
+    }
+  }, [selectedIds, elements]);
 
   useEffect(() => {
     if (textEditor) setTimeout(() => textareaRef.current?.focus(), 50);
@@ -129,46 +147,17 @@ export default function Whiteboard() {
     }
 
     if (tool === 'graph') {
-      const fn = prompt('Función (ej: sin(x) | Paramétrica: cos(t),sin(t) | Polar: r=cos(4*t)):', 'sin(x)');
-      if (!fn) return;
+      const stage = stageRef.current;
+      if (!stage) return;
       const canvasPos = getCanvasPos();
-      const pts: number[] = [];
-      const SCALE = 40;
-      try {
-        const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
-                         .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
-        
-        if (safeFn.startsWith('r=')) {
-          const expr = safeFn.slice(2);
-          const evalFn = new Function('t', `return ${expr}`);
-          for (let t = 0; t <= Math.PI * 4; t += 0.05) {
-            const r = evalFn(t);
-            if (!isNaN(r)) pts.push(canvasPos.x + r * Math.cos(t) * SCALE, canvasPos.y - r * Math.sin(t) * SCALE);
-          }
-        } else if (safeFn.includes(',')) {
-          const parts = safeFn.split(',');
-          const evalX = new Function('t', `return ${parts[0]}`);
-          const evalY = new Function('t', `return ${parts[1]}`);
-          for (let t = -10; t <= 10; t += 0.05) {
-            const x = evalX(t);
-            const y = evalY(t);
-            if (!isNaN(x) && !isNaN(y)) pts.push(canvasPos.x + x * SCALE, canvasPos.y - y * SCALE);
-          }
-        } else {
-          const evalFn = new Function('x', `return ${safeFn}`);
-          for (let x = -10; x <= 10; x += 0.05) {
-            const y = evalFn(x);
-            if (!isNaN(y)) pts.push(canvasPos.x + x * SCALE, canvasPos.y - y * SCALE);
-          }
-        }
-
-        const newEl: BoardElement = {
-          id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: strokeWidth || 2
-        };
-        const updated = [...elements, newEl];
-        setElements(updated);
-        pushHistory(updated);
-      } catch (e) { alert('Error de sintaxis. Usa variables "x" o "t". Ej: 2*x'); }
+      const stageBox = stage.container().getBoundingClientRect();
+      const pointer = stage.getPointerPosition();
+      setShowGraphModal({
+        x: pointer.x + stageBox.left,
+        y: pointer.y + stageBox.top,
+        canvasX: canvasPos.x,
+        canvasY: canvasPos.y,
+      });
       return;
     }
 
@@ -476,6 +465,98 @@ export default function Whiteboard() {
         />
       )}
 
+      {showGraphModal && (
+        <div style={{
+          position: 'fixed', zIndex: 200,
+          left: showGraphModal.x, top: showGraphModal.y,
+          background: 'rgba(18,18,24,0.95)', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 12, padding: 16, color: 'white',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
+          display: 'flex', flexDirection: 'column', gap: 10, width: 280
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+            <span>Graficador Matemático</span>
+            <button onClick={() => setShowGraphModal(null)} style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer' }}>✕</button>
+          </div>
+          <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.4 }}>
+            Ingresa una función matemática. Soporta:<br/>
+            - <b>Normal:</b> <code style={{ color: '#818cf8' }}>sin(x)</code> o <code style={{ color: '#818cf8' }}>x*x</code><br/>
+            - <b>Paramétrica:</b> <code style={{ color: '#818cf8' }}>cos(t),sin(t)</code><br/>
+            - <b>Polar:</b> <code style={{ color: '#818cf8' }}>r=cos(4*t)</code>
+          </div>
+          <input
+            autoFocus
+            type="text"
+            value={graphInput}
+            onChange={(e) => setGraphInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const fn = graphInput;
+                if (!fn) return;
+                const pts: number[] = [];
+                const SCALE = 40;
+                try {
+                  const safeFn = fn.replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
+                                   .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/PI/g, 'Math.PI');
+                  
+                  if (safeFn.startsWith('r=')) {
+                    const expr = safeFn.slice(2);
+                    const evalFn = new Function('t', `return ${expr}`);
+                    for (let t = 0; t <= Math.PI * 4; t += 0.05) {
+                      const r = evalFn(t);
+                      if (!isNaN(r)) pts.push(showGraphModal.canvasX + r * Math.cos(t) * SCALE, showGraphModal.canvasY - r * Math.sin(t) * SCALE);
+                    }
+                  } else if (safeFn.includes(',')) {
+                    const parts = safeFn.split(',');
+                    const evalX = new Function('t', `return ${parts[0]}`);
+                    const evalY = new Function('t', `return ${parts[1]}`);
+                    for (let t = -10; t <= 10; t += 0.05) {
+                      const x = evalX(t);
+                      const y = evalY(t);
+                      if (!isNaN(x) && !isNaN(y)) pts.push(showGraphModal.canvasX + x * SCALE, showGraphModal.canvasY - y * SCALE);
+                    }
+                  } else {
+                    const evalFn = new Function('x', `return ${safeFn}`);
+                    for (let x = -10; x <= 10; x += 0.05) {
+                      const y = evalFn(x);
+                      if (!isNaN(y)) pts.push(showGraphModal.canvasX + x * SCALE, showGraphModal.canvasY - y * SCALE);
+                    }
+                  }
+
+                  const newEl: BoardElement = {
+                    id: uuidv4(), type: 'pen', x: 0, y: 0, points: pts, stroke: color, strokeWidth: strokeWidth || 2
+                  };
+                  const updated = [...elements, newEl];
+                  setElements(updated);
+                  pushHistory(updated);
+                  setShowGraphModal(null);
+                  setTool('select');
+                } catch (err) { alert('Error de sintaxis.'); }
+              }
+            }}
+            style={{
+              background: 'rgba(0,0,0,0.5)', border: '1px solid #444',
+              color: 'white', padding: '8px 12px', borderRadius: 6,
+              fontFamily: 'monospace', outline: 'none'
+            }}
+            placeholder="Ej: sin(x)"
+          />
+          <button
+            onClick={() => {
+              const e = new KeyboardEvent('keydown', { key: 'Enter' });
+              // Small hack to trigger the logic above
+              document.activeElement?.dispatchEvent(e);
+            }}
+            style={{
+              background: '#4f46e5', color: 'white', border: 'none',
+              padding: '8px', borderRadius: 6, cursor: 'pointer', fontWeight: 500
+            }}
+          >
+            Graficar
+          </button>
+        </div>
+      )}
+
       <Stage
         width={window.innerWidth} height={window.innerHeight}
         ref={stageRef}
@@ -498,18 +579,53 @@ export default function Whiteboard() {
           {elements.map(el => {
             const isSel = selectedIds.includes(el.id);
             const isDraggable = isSel && tool === 'select';
-            const showTransformer = isSel && selectedIds.length === 1;
             return (
               <ElementWrapper
                 key={el.id}
                 el={el}
-                isSelected={showTransformer}
                 isDraggable={isDraggable}
                 onSelect={handleElementSelect}
                 onChange={handleChange}
+                onNode={(id, node) => {
+                  if (node) nodeRefs.current[id] = node;
+                  else delete nodeRefs.current[id];
+                }}
               />
             );
           })}
+
+          <Transformer
+            ref={trRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              if (newBox.width < 5 || newBox.height < 5) return oldBox;
+              return newBox;
+            }}
+            onTransformEnd={() => {
+              if (!trRef.current) return;
+              const nodes = trRef.current.nodes();
+              let updated = [...elements];
+              nodes.forEach((node: any) => {
+                const elIdx = updated.findIndex(e => e.id === node.id());
+                if (elIdx !== -1) {
+                  const el = updated[elIdx];
+                  const scaleX = node.scaleX();
+                  const scaleY = node.scaleY();
+                  node.scaleX(1);
+                  node.scaleY(1);
+                  updated[elIdx] = {
+                    ...el,
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(5, (el.width || 0) * scaleX),
+                    height: Math.max(5, (el.height || 0) * scaleY),
+                    rotation: node.rotation(),
+                  };
+                }
+              });
+              setElements(updated);
+              pushHistory(updated);
+            }}
+          />
 
           {/* Marquee */}
           {marquee && (

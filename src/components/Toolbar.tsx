@@ -125,7 +125,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
           {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
           {showMath && (
             <div className="glass-panel" style={{
-              position: 'absolute', top: 0, left: '100%', marginLeft: 16,
+              position: 'absolute', bottom: 0, left: '100%', marginLeft: 16,
               width: 220, padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
               maxHeight: 400, overflowY: 'auto'
             }}>

@@ -508,7 +508,7 @@ export default function Whiteboard() {
 
           {elements.map(el => {
             const isSel = selectedIds.includes(el.id);
-            const isDraggable = isSel && tool === 'select';
+            const isDraggable = isSel && tool === 'select' && selectedIds.length === 1;
             return (
               <ElementWrapper
                 key={el.id}
@@ -528,11 +528,36 @@ export default function Whiteboard() {
 
           <Transformer
             ref={trRef}
+            draggable
             boundBoxFunc={(oldBox, newBox) => {
               if (newBox.width < 5 || newBox.height < 5) return oldBox;
               return newBox;
             }}
-            onDragEnd={() => pushHistory(elements)}
+            onDragEnd={(e) => {
+              if (e.target !== trRef.current) return;
+              const dx = e.target.x();
+              const dy = e.target.y();
+              // Reset Transformer position to 0,0 but apply delta to nodes
+              e.target.x(0);
+              e.target.y(0);
+              
+              const nodes = trRef.current.nodes();
+              let updated = [...elements];
+              nodes.forEach((node: any) => {
+                const elIdx = updated.findIndex(el => el.id === node.id());
+                if (elIdx !== -1) {
+                  updated[elIdx] = {
+                    ...updated[elIdx],
+                    x: node.x() + dx,
+                    y: node.y() + dy
+                  };
+                  node.x(node.x() + dx);
+                  node.y(node.y() + dy);
+                }
+              });
+              setElements(updated);
+              pushHistory(updated);
+            }}
             onTransformEnd={() => {
               if (!trRef.current) return;
               const nodes = trRef.current.nodes();

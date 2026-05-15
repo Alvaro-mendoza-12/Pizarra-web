@@ -131,9 +131,13 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
           {btn(showMath, () => setShowMath(!showMath), <Sigma size={20} />, 'Fórmulas Matemáticas')}
           {showMath && (
             <div className="glass-panel" style={{
-              position: 'absolute', bottom: 0, left: '100%', marginLeft: 16,
+              position: 'fixed', // Fixed to avoid clipping by sidebar overflow
+              bottom: 'auto', 
+              top: '50%',
+              left: 75, // Next to the sidebar
+              transform: 'translateY(-50%)',
               width: 220, padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
-              maxHeight: 400, overflowY: 'auto'
+              maxHeight: 400, overflowY: 'auto', zIndex: 1000
             }}>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, padding: '4px 8px', textTransform: 'uppercase' }}>
                 Fórmulas
@@ -143,7 +147,8 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
                   key={f.label}
                   className="toolbar-btn" 
                   style={{ width: '100%', justifyContent: 'flex-start', padding: '8px 12px', height: 'auto', textAlign: 'left', borderRadius: 6 }}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     p.onInsertFormula(f.value);
                     setShowMath(false);
                     p.onTool('select');

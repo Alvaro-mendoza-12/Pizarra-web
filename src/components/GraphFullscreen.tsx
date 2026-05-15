@@ -22,8 +22,10 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
   const [viewport, setViewport] = useState({ x: window.innerWidth / 2 + 100, y: window.innerHeight / 2, scale: 40 });
   const [is3D, setIs3D] = useState(false);
 
+  const COLORS = ['#818cf8', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+
   const addFunction = () => {
-    setFunctions([...functions, { id: uuidv4(), expression: '', color: '#' + Math.floor(Math.random()*16777215).toString(16), visible: true }]);
+    setFunctions([...functions, { id: uuidv4(), expression: '', color: COLORS[functions.length % COLORS.length], visible: true }]);
   };
 
   const removeFunction = (id: string) => {
@@ -42,6 +44,7 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
     return functions.filter(f => f.visible && f.expression).map(f => {
       const pts: number[] = [];
       const exprRaw = f.expression.toLowerCase().replace(/^(f\(x\)|y)\s*=\s*/, '');
+      const isImplicit = exprRaw.includes('=') && !exprRaw.startsWith('r=');
       
       const prepareExpr = (raw: string) => raw
         .replace(/\^/g, '**')
@@ -53,18 +56,20 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
         .replace(/abs/g, 'Math.abs').replace(/exp/g, 'Math.exp').replace(/log/g, 'Math.log');
 
       try {
-        if (exprRaw.includes('=') && !exprRaw.startsWith('r=')) {
-          // Implicit equation (e.g., x^2 + y^2 = 25)
+        if (isImplicit) {
           const [leftSide, rightSide] = exprRaw.split('=').map(prepareExpr);
           const evalFn = new Function('x', 'y', `return (${leftSide}) - (${rightSide})`);
           
-          const step = 0.15;
-          const range = 15;
+          const step = 0.12;
+          const range = 18;
+          const threshold = 0.45;
           for (let x = -range; x <= range; x += step) {
             for (let y = -range; y <= range; y += step) {
               const val = evalFn(x, y);
-              if (Math.abs(val) < 0.4) {
-                pts.push(x * viewport.scale, -y * viewport.scale);
+              if (Math.abs(val) < threshold) {
+                // Scatter points for implicit to avoid connection mess
+                pts.push(x * viewport.scale, -y * viewport.scale, x * viewport.scale + 0.1, -y * viewport.scale);
+                pts.push(NaN, NaN);
               }
             }
           }
@@ -92,7 +97,7 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
           }
         }
       } catch (e) { console.error(e); }
-      return { id: f.id, points: pts, color: f.color };
+      return { id: f.id, points: pts, color: f.color, isImplicit };
     });
   }, [functions, viewport.scale]);
 
@@ -166,7 +171,7 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {functions.map(f => (
-            <div key={f.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8, transition: 'all 0.2s' }}>
+            <div key={f.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div 
                   onClick={() => toggleVisibility(f.id)} 
@@ -181,10 +186,25 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
                 <input 
                   value={f.expression}
                   onChange={(e) => updateFunction(f.id, e.target.value)}
-                  placeholder="f(x) = ..."
-                  style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: 16, fontFamily: 'Fira Code, monospace', fontWeight: 500 }}
+                  placeholder="Ej: x^2 + y^2 = 25"
+                  style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: 16, fontFamily: 'Fira Code, monospace' }}
                 />
-                <button onClick={() => removeFunction(f.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 4 }}><Trash2 size={16}/></button>
+                <button onClick={() => removeFunction(f.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}><Trash2 size={16}/></button>
+              </div>
+              
+              {/* Color Palette */}
+              <div style={{ display: 'flex', gap: 6, marginLeft: 34 }}>
+                {COLORS.map(c => (
+                  <div 
+                    key={c} 
+                    onClick={() => setFunctions(functions.map(fn => fn.id === f.id ? { ...fn, color: c } : fn))}
+                    style={{ 
+                      width: 14, height: 14, borderRadius: '50%', background: c, cursor: 'pointer',
+                      border: f.color === c ? '2px solid white' : 'none',
+                      opacity: f.color === c ? 1 : 0.4
+                    }} 
+                  />
+                ))}
               </div>
             </div>
           ))}

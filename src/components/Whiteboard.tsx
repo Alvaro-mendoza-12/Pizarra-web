@@ -301,37 +301,11 @@ export default function Whiteboard() {
   }, [tool]);
 
   const handleChange = useCallback((id: string, attrs: any) => {
-    const el = elements.find(e => e.id === id);
-    if (!el) return;
-
-    // Calculate displacement delta from the primary element
-    const dx = (attrs.x !== undefined ? attrs.x : el.x || 0) - (el.x || 0);
-    const dy = (attrs.y !== undefined ? attrs.y : el.y || 0) - (el.y || 0);
-
-    if (selectedIds.length > 1 && selectedIds.includes(id)) {
-      const updated = elements.map(e => {
-        if (selectedIds.includes(e.id)) {
-          if (e.id === id) return { ...e, ...attrs, x: Math.round((attrs.x ?? e.x) * 10) / 10, y: Math.round((attrs.y ?? e.y) * 10) / 10 };
-          const node = nodeRefs.current[e.id];
-          if (node) {
-            return { ...e, x: Math.round(node.x() * 10) / 10, y: Math.round(node.y() * 10) / 10 };
-          } else {
-            return { ...e, x: Math.round(((e.x || 0) + dx) * 10) / 10, y: Math.round(((e.y || 0) + dy) * 10) / 10 };
-          }
-        }
-        return e;
-      });
-      setElements(updated);
-      pushHistory(updated);
-    } else {
-      const roundedAttrs = { ...attrs };
-      if (roundedAttrs.x !== undefined) roundedAttrs.x = Math.round(roundedAttrs.x * 10) / 10;
-      if (roundedAttrs.y !== undefined) roundedAttrs.y = Math.round(roundedAttrs.y * 10) / 10;
-      const updated = elements.map(e => e.id === id ? { ...e, ...roundedAttrs } : e);
-      setElements(updated);
-      pushHistory(updated);
-    }
-  }, [elements, pushHistory, selectedIds]);
+    setElements(prev => prev.map(e => e.id === id ? { ...e, ...attrs } : e));
+    // We only push to history once if it's a multi-selection? 
+    // Actually, pushing on every small change is fine as long as they are grouped in the same tick.
+    // But for safety, let's use the functional update.
+  }, []);
 
   const deleteSelected = useCallback(() => {
     if (!selectedIds.length) return;
@@ -558,6 +532,7 @@ export default function Whiteboard() {
               if (newBox.width < 5 || newBox.height < 5) return oldBox;
               return newBox;
             }}
+            onDragEnd={() => pushHistory(elements)}
             onTransformEnd={() => {
               if (!trRef.current) return;
               const nodes = trRef.current.nodes();

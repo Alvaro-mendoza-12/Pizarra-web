@@ -291,14 +291,17 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
             plot_bgcolor: '#0a0a0c',
             margin: { l: 0, r: 0, t: 0, b: 0 },
             showlegend: false,
-            scene: is3D ? {
-              xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8' },
-              yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' },
-              zaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#10b981' },
-              camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
-            } : undefined,
-            xaxis: !is3D ? { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8', scaleanchor: 'y', scaleratio: 1 } : undefined,
-            yaxis: !is3D ? { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' } : undefined,
+            ...(is3D ? {
+              scene: {
+                xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8' },
+                yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' },
+                zaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#10b981' },
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
+              }
+            } : {
+              xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8', scaleanchor: 'y', scaleratio: 1 },
+              yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' }
+            })
           }}
           config={{ displayModeBar: true, responsive: true }}
           style={{ width: '100%', height: '100%' }}

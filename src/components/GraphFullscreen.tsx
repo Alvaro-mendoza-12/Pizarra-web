@@ -46,15 +46,26 @@ interface FunctionItem {
 interface GraphFullscreenProps {
   onClose: () => void;
   onInsert: (elements: any[]) => void;
+  initialFormula: string | null;
+  initialIs3D: boolean;
 }
 
 const COLORS = ['#818cf8', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
 
-export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onInsert }) => {
+export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onInsert, initialFormula, initialIs3D }) => {
   const [functions, setFunctions] = useState<FunctionItem[]>([
     { id: '1', expression: 'x^2', color: '#818cf8', visible: true, type: '2d' }
   ]);
   const [is3D, setIs3D] = useState(false);
+
+  useEffect(() => {
+    if (initialFormula) {
+      setFunctions([
+        { id: uuidv4(), expression: initialFormula, color: '#818cf8', visible: true, type: initialIs3D ? '3d' : '2d' }
+      ]);
+      setIs3D(initialIs3D);
+    }
+  }, [initialFormula, initialIs3D]);
 
   const addFunction = () => {
     setFunctions([...functions, { id: uuidv4(), expression: '', color: COLORS[functions.length % COLORS.length], visible: true, type: is3D ? '3d' : '2d' }]);
@@ -161,6 +172,29 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
 
     return data;
   }, [functions, is3D]);
+
+  const handleZoom2D = (factor: number) => {
+    const Plotly = (window as any).Plotly;
+    const div = document.querySelector('.graph-main > div');
+    if (!div || !Plotly) return;
+    
+    const layout = (div as any).layout;
+    if (!layout || !layout.xaxis || !layout.yaxis) return;
+    
+    const xRange = layout.xaxis.range;
+    const yRange = layout.yaxis.range;
+    if (!xRange || !yRange) return;
+    
+    const xCenter = (xRange[0] + xRange[1]) / 2;
+    const yCenter = (yRange[0] + yRange[1]) / 2;
+    const xSpan = (xRange[1] - xRange[0]) * factor;
+    const ySpan = (yRange[1] - yRange[0]) * factor;
+    
+    Plotly.relayout(div, {
+      'xaxis.range': [xCenter - xSpan / 2, xCenter + xSpan / 2],
+      'yaxis.range': [yCenter - ySpan / 2, yCenter + ySpan / 2]
+    });
+  };
 
   const handleInsert = () => {
     // Basic mapping of 2D data to strokes for the whiteboard
@@ -307,9 +341,43 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
           style={{ width: '100%', height: '100%' }}
         />
         
+        {/* Floating Zoom Controls for 2D */}
+        {!is3D && (
+          <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 8, zIndex: 10 }}>
+            <button 
+              onClick={() => handleZoom2D(0.7)} 
+              title="Acercar Zoom"
+              style={{
+                background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                fontWeight: 600, backdropFilter: 'blur(12px)', fontSize: 13,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)', transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(79, 70, 229, 0.85)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'}
+            >
+              Zoom +
+            </button>
+            <button 
+              onClick={() => handleZoom2D(1.4)} 
+              title="Alejar Zoom"
+              style={{
+                background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                fontWeight: 600, backdropFilter: 'blur(12px)', fontSize: 13,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)', transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(79, 70, 229, 0.85)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(15, 23, 42, 0.75)'}
+            >
+              Zoom -
+            </button>
+          </div>
+        )}
+
         {/* Help tooltip */}
         <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', padding: '10px 20px', borderRadius: 30, color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 500, border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', pointerEvents: 'none' }}>
-          {is3D ? 'Arrastra para rotar • Scroll para zoom 3D' : 'Arrastra para mover • Scroll para zoom 2D'}
+          {is3D ? 'Arrastra para rotar • Scroll para zoom 3D' : 'Arrastra para mover • Zoom + y - para ajustar • Scroll para zoom'}
         </div>
       </div>
     </div>

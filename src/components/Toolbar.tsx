@@ -75,7 +75,7 @@ interface ToolbarProps {
   onZoomOut: () => void;
   onZoomReset: () => void;
   onDeleteSelected: () => void;
-  onInsertFormula: () => void;
+  onInsertFormula: (formula: string, is3D: boolean) => void;
   onOpenGraphModal: () => void;
   onShare: () => void;
   onSave: () => void;
@@ -89,23 +89,20 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
   const [showProperties, setShowProperties] = useState(window.innerWidth > 768);
 
   const MATH_FORMULAS = [
-    { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²', group: '2D' },
-    { label: 'Elipse', value: 'x²/a² + y²/b² = 1', group: '2D' },
-    { label: 'Hipérbola H', value: 'x²/a² - y²/b² = 1', group: '2D' },
-    { label: 'Hipérbola V', value: 'y²/a² - x²/b² = 1', group: '2D' },
-    { label: 'Parábola', value: 'y = a(x - h)² + k', group: '2D' },
-    { label: 'Polares: Caracol', value: 'r = a ± b·cos(θ)', group: 'Polar' },
-    { label: 'Polares: Rosa', value: 'r = a·cos(nθ)', group: 'Polar' },
-    { label: 'Polares: Espiral', value: 'r = a + b·θ', group: 'Polar' },
-    { label: 'Polares: Lemniscata', value: 'r² = a²·cos(2θ)', group: 'Polar' },
-    { label: 'Esfera', value: 'x² + y² + z² = r²', group: '3D' },
-    { label: 'Cilindro', value: 'x² + y² = r²', group: '3D' },
-    { label: 'Elipsoide', value: 'x²/a² + y²/b² + z²/c² = 1', group: '3D' },
-    { label: 'Paraboloide E.', value: 'z = x²/a² + y²/b²', group: '3D' },
-    { label: 'Paraboloide H.', value: 'z = y²/b² - x²/a²', group: '3D' },
-    { label: 'Hiperboloide 1H', value: 'x²/a² + y²/b² - z²/c² = 1', group: '3D' },
-    { label: 'Hiperboloide 2H', value: 'z²/c² - x²/a² - y²/b² = 1', group: '3D' },
-    { label: 'Cono Elíptico', value: 'z²/c² = x²/a² + y²/b²', group: '3D' },
+    { label: 'Circunferencia (Polar r = 3)', value: 'r = 3', group: '2D' },
+    { label: 'Elipse (Polar r)', value: 'r = 2 / (1 - 0.6 * cos(theta))', group: '2D' },
+    { label: 'Hipérbola (Polar r)', value: 'r = 2 / (1 - 1.5 * cos(theta))', group: '2D' },
+    { label: 'Parábola (y = ax²)', value: 'y = 0.2 * x^2', group: '2D' },
+    { label: 'Polares: Caracol', value: 'r = 2 + 1.5 * cos(theta)', group: 'Polar' },
+    { label: 'Polares: Rosa', value: 'r = 3 * cos(4 * theta)', group: 'Polar' },
+    { label: 'Polares: Espiral', value: 'r = 0.2 * theta', group: 'Polar' },
+    { label: 'Polares: Lemniscata', value: 'r = 3 * sqrt(abs(cos(2 * theta)))', group: 'Polar' },
+    { label: 'Esfera (Z >= 0)', value: 'z = sqrt(16 - x^2 - y^2)', group: '3D' },
+    { label: 'Ondulación 3D (Seno)', value: 'z = sin(sqrt(x^2 + y^2))', group: '3D' },
+    { label: 'Paraboloide Elíptico', value: 'z = x^2 / 4 + y^2 / 4', group: '3D' },
+    { label: 'Paraboloide H. (Silla)', value: 'z = y^2 / 4 - x^2 / 4', group: '3D' },
+    { label: 'Cono (Z >= 0)', value: 'z = sqrt(x^2 + y^2)', group: '3D' },
+    { label: 'Campana 3D', value: 'z = 4 / (1 + x^2 + y^2)', group: '3D' },
   ];
 
   const groups: Record<string, typeof MATH_FORMULAS> = {};
@@ -376,7 +373,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
                   }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.1)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                  onClick={() => { p.onInsertFormula(); setShowMathMenu(false); }}
+                  onClick={() => { p.onInsertFormula(f.value, f.group === '3D'); setShowMathMenu(false); }}
                 >
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{f.label}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'Fira Code, monospace' }}>{f.value}</div>

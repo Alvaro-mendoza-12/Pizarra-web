@@ -40,6 +40,8 @@ export default function Whiteboard() {
   const [showGraph, setShowGraph] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [initialFormula, setInitialFormula] = useState<string | null>(null);
+  const [initialIs3D, setInitialIs3D] = useState<boolean>(false);
   const stageRef = useRef<any>(null);
   const trRef = useRef<any>(null);
   const nodeRefs = useRef<{ [id: string]: any }>({});
@@ -73,6 +75,26 @@ export default function Whiteboard() {
     }
   }, []);
 
+  // Back button popstate listener to safely close modal on mobile
+  useEffect(() => {
+    if (showGraph) {
+      window.history.pushState({ modal: 'graph' }, '');
+      const handlePopState = () => {
+        setShowGraph(false);
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [showGraph]);
+
+  const handleInsertFormula = (formula: string, is3d: boolean) => {
+    setInitialFormula(formula);
+    setInitialIs3D(is3d);
+    setShowGraph(true);
+  };
+
   const getPos = useCallback(() => {
     const s = stageRef.current;
     if (!s) return { x: 0, y: 0 };
@@ -82,9 +104,11 @@ export default function Whiteboard() {
   }, []);
 
   const handleMouseMove = useCallback(() => {
+    const pos = getPos();
+    if (isConnected) updateCursor(pos.x, pos.y);
+
     const { tool } = store;
     if (tool === 'select' && marqueeStart.current) {
-      const pos = getPos();
       const { x: sx, y: sy } = marqueeStart.current;
       const w = Math.abs(pos.x - sx), h = Math.abs(pos.y - sy);
       if (w > 3 || h > 3) {
@@ -94,7 +118,6 @@ export default function Whiteboard() {
       return;
     }
     if (!isDrawing || store.elements.length === 0) return;
-    const pos = getPos();
     const els = [...store.elements];
     const last = { ...els[els.length - 1] };
     if (tool === 'pen' || tool === 'eraser' || tool === 'highlighter') {
@@ -112,9 +135,6 @@ export default function Whiteboard() {
     }
     els[els.length - 1] = last;
     store.setElements(els);
-
-    // Sync cursor
-    if (isConnected) updateCursor(pos.x, pos.y);
   }, [store, isDrawing, getPos, isConnected, updateCursor]);
 
   const handleMouseDown = useCallback((e: any) => {
@@ -372,8 +392,8 @@ export default function Whiteboard() {
         onImport={e => { const f = e.target.files?.[0]; if (f) { const fr = new FileReader(); fr.onload = ev => addImage(ev.target?.result as string); fr.readAsDataURL(f); } }}
         onZoomIn={() => zoom(1.2)} onZoomOut={() => zoom(0.8)}
         onZoomReset={() => { store.setStageScale(1); store.setStagePos({ x: 0, y: 0 }); }}
-        onInsertFormula={() => {}}
-        onOpenGraphModal={() => setShowGraph(true)}
+        onInsertFormula={handleInsertFormula}
+        onOpenGraphModal={() => { setInitialFormula(null); setShowGraph(true); }}
         onShare={() => setShowShare(true)}
         onSave={saveBoard} onLoad={loadBoard}
       />
@@ -421,6 +441,8 @@ export default function Whiteboard() {
         <GraphFullscreen
           onClose={() => setShowGraph(false)}
           onInsert={els => { const u = [...store.elements, ...els]; store.pushHistory(u); setShowGraph(false); }}
+          initialFormula={initialFormula}
+          initialIs3D={initialIs3D}
         />
       </div>
 

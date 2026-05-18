@@ -34,6 +34,29 @@
   --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+[data-theme='light'] {
+  --bg-base: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --bg-hover: rgba(0,0,0,0.05);
+  --bg-active: rgba(99,102,241,0.15);
+
+  --accent: #4f46e5;
+  --accent-glow: rgba(79, 70, 229, 0.25);
+  --accent-light: #6366f1;
+
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.15);
+
+  --text-primary: #0f172a;
+  --text-secondary: rgba(15,23,42,0.65);
+  --text-muted: rgba(15,23,42,0.4);
+
+  --shadow-panel: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-button: 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-glow: 0 0 20px var(--accent-glow);
+}
+
 /* ─── Reset ─────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;

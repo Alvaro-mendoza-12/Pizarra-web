@@ -4,7 +4,7 @@ import {
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
   ZoomIn, ZoomOut, RotateCcw, Grid, Sigma, ArrowUpRight,
   Plus, Activity, Highlighter, StickyNote, Triangle,
-  Share2, Save, FolderOpen, Palette
+  Share2, Save, FolderOpen, Palette, Sun, Moon
 } from 'lucide-react';
 import type { Tool } from '../types';
 import { useBoardStore } from '../store/boardStore';
@@ -84,7 +84,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
-  const { tool, color, strokeWidth, fontSize, showGrid, setTool, setColor, setStrokeWidth, setFontSize, setShowGrid, peers, roomId } = useBoardStore();
+  const { tool, color, strokeWidth, fontSize, showGrid, setTool, setColor, setStrokeWidth, setFontSize, setShowGrid, peers, roomId, theme, setTheme } = useBoardStore();
   const [showMathMenu, setShowMathMenu] = useState(false);
   const [showProperties, setShowProperties] = useState(window.innerWidth > 768);
 
@@ -155,6 +155,10 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
 
         <button className={`toolbar-btn ${showGrid ? 'active' : ''}`} onClick={() => setShowGrid(!showGrid)} title="Cuadrícula (G)">
           <Grid size={17} />
+        </button>
+
+        <button className="toolbar-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
         </button>
 
         <div className="toolbar-sep-v" />

@@ -18,6 +18,7 @@ interface BoardStore {
   roomId: string;
   userName: string;
   isReadOnly: boolean;
+  theme: 'dark' | 'light';
   peers: { id: string; name: string; color: string; cursor?: { x: number; y: number } }[];
 
   // Actions
@@ -40,6 +41,7 @@ interface BoardStore {
   setRoomId: (id: string) => void;
   setUserName: (n: string) => void;
   setIsReadOnly: (ro: boolean) => void;
+  setTheme: (t: 'dark' | 'light') => void;
   setPeers: (peers: any[]) => void;
 }
 
@@ -58,6 +60,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   roomId: '',
   userName: 'Tú',
   isReadOnly: false,
+  theme: 'dark',
   peers: [],
 
   setElements: (els) => set({ elements: els }),
@@ -116,5 +119,6 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   setRoomId: (id) => set({ roomId: id }),
   setUserName: (n) => set({ userName: n }),
   setIsReadOnly: (ro) => set({ isReadOnly: ro }),
+  setTheme: (t) => set({ theme: t }),
   setPeers: (peers) => set({ peers }),
 }));

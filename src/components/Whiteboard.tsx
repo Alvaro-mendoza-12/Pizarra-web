@@ -147,7 +147,7 @@ export default function Whiteboard() {
     const id = uuidv4();
     const newEl: BoardElement = {
       id, type: tool, x: pos.x, y: pos.y,
-      stroke: tool === 'eraser' ? 'rgba(0,0,0,1)' : color,
+      stroke: tool === 'eraser' ? (store.theme === 'light' ? '#f1f5f9' : '#0c0c10') : color,
       strokeWidth: tool === 'eraser' ? strokeWidth * 4 : tool === 'highlighter' ? strokeWidth * 3 : strokeWidth,
       fill: (tool === 'rect' || tool === 'circle' || tool === 'triangle') ? 'transparent' : undefined,
       isHighlighter: tool === 'highlighter',
@@ -415,12 +415,12 @@ export default function Whiteboard() {
         );
       })}
 
-      {showGraph && (
+      <div style={{ display: showGraph ? 'block' : 'none' }}>
         <GraphFullscreen
           onClose={() => setShowGraph(false)}
           onInsert={els => { const u = [...store.elements, ...els]; store.pushHistory(u); setShowGraph(false); }}
         />
-      )}
+      </div>
 
       {showShare && (
         <ShareModal

@@ -1,14 +1,39 @@
-import React, { useState, useMemo } from 'react';
-// @ts-ignore
-import Plotly from 'plotly.js-dist-min';
-// @ts-ignore
-import createPlotlyComponent from 'react-plotly.js/factory';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as math from 'mathjs';
 import { Plus, Trash2, Check, ArrowLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-const PlotFactory = (createPlotlyComponent as any).default || createPlotlyComponent;
-const Plot = PlotFactory(Plotly);
+const Plot = ({ data, layout, config, style }: any) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const Plotly = (window as any).Plotly;
+    if (!Plotly) {
+      console.warn("Plotly is not loaded yet.");
+      return;
+    }
+
+    Plotly.newPlot(containerRef.current, data, layout, config);
+
+    const handleResize = () => {
+      if (containerRef.current && Plotly) {
+        Plotly.Plots.resize(containerRef.current);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (containerRef.current && Plotly) {
+        Plotly.purge(containerRef.current);
+      }
+    };
+  }, [data, layout, config]);
+
+  return <div ref={containerRef} style={style} />;
+};
 
 interface FunctionItem {
   id: string;

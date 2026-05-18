@@ -129,62 +129,60 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
           </div>
 
           {!isJoinMode && (
-            <>
-              <div>
-                <div className="panel-label">ID de la sala</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    className="board-input"
-                    value={inputRoom}
-                    onChange={e => setInputRoom(e.target.value)}
-                    placeholder="Nombre de sala..."
-                    style={{ fontFamily: 'Fira Code, monospace', fontSize: 13 }}
-                  />
-                  <button
-                    className="btn-secondary"
-                    onClick={() => setInputRoom(generateRoom())}
-                    title="Generar nuevo ID"
-                    style={{ flex: '0 0 auto', padding: '8px 12px' }}
-                  >
-                    ↺
-                  </button>
-                </div>
+            <div>
+              <div className="panel-label">ID de la sala</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="board-input"
+                  value={inputRoom}
+                  onChange={e => setInputRoom(e.target.value)}
+                  placeholder="Nombre de sala..."
+                  style={{ fontFamily: 'Fira Code, monospace', fontSize: 13 }}
+                />
+                <button
+                  className="btn-secondary"
+                  onClick={() => setInputRoom(generateRoom())}
+                  title="Generar nuevo ID"
+                  style={{ flex: '0 0 auto', padding: '8px 12px' }}
+                >
+                  ↺
+                </button>
               </div>
-
-              {/* Share link */}
-              <div>
-                <div className="panel-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  Enlace para compartir
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textTransform: 'none', color: 'var(--text-primary)' }}>
-                    <input type="checkbox" checked={shareAsViewOnly} onChange={e => setShareAsViewOnly(e.target.checked)} />
-                    Solo lectura
-                  </label>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div style={{
-                    flex: 1, padding: '8px 12px',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8, fontSize: 12,
-                    color: 'var(--text-muted)',
-                    fontFamily: 'Fira Code, monospace',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                  }}>
-                    <Link2 size={12} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                    {shareUrl}
-                  </div>
-                  <button className="btn-secondary" onClick={handleCopy} style={{ flex: '0 0 auto', padding: '8px 12px' }}>
-                    {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
-                  </button>
-                </div>
-                {copied && (
-                  <span style={{ fontSize: 12, color: '#34d399', marginTop: 4, display: 'block' }}>
-                    ✓ Enlace copiado al portapapeles
-                  </span>
-                )}
-              </div>
-            </>
+            </div>
           )}
+
+          {/* Share link - Always visible to let anyone invite friends */}
+          <div>
+            <div className="panel-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              Enlace para compartir
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textTransform: 'none', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={shareAsViewOnly} onChange={e => setShareAsViewOnly(e.target.checked)} />
+                Solo lectura
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{
+                flex: 1, padding: '8px 12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, fontSize: 12,
+                color: 'var(--text-muted)',
+                fontFamily: 'Fira Code, monospace',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>
+                <Link2 size={12} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+                {shareUrl}
+              </div>
+              <button className="btn-secondary" onClick={handleCopy} style={{ flex: '0 0 auto', padding: '8px 12px' }}>
+                {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+              </button>
+            </div>
+            {copied && (
+              <span style={{ fontSize: 12, color: '#34d399', marginTop: 4, display: 'block' }}>
+                ✓ Enlace copiado al portapapeles
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Actions */}

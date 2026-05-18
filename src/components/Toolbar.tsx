@@ -307,19 +307,25 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         <div style={{ width: '100%' }}>
           <div className="panel-label">Grosor</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {STROKE_WIDTHS.map(w => (
-              <div
-                key={w}
-                className={`stroke-option ${strokeWidth === w ? 'active' : ''}`}
-                onClick={() => setStrokeWidth(w)}
-              >
-                <div style={{
-                  width: '85%', height: Math.min(w, 14),
-                  backgroundColor: strokeWidth === w ? color : 'rgba(255,255,255,0.5)',
-                  borderRadius: w, transition: 'all 0.15s'
-                }} />
-              </div>
-            ))}
+            {STROKE_WIDTHS.map(w => {
+              const isWhiteColor = color.toLowerCase() === '#ffffff';
+              const strokeBg = strokeWidth === w 
+                ? (isWhiteColor && theme === 'light' ? '#0f172a' : color) 
+                : (theme === 'light' ? 'rgba(15, 23, 42, 0.2)' : 'rgba(255, 255, 255, 0.35)');
+              return (
+                <div
+                  key={w}
+                  className={`stroke-option ${strokeWidth === w ? 'active' : ''}`}
+                  onClick={() => setStrokeWidth(w)}
+                >
+                  <div style={{
+                    width: '85%', height: Math.min(w, 14),
+                    backgroundColor: strokeBg,
+                    borderRadius: w, transition: 'all 0.15s'
+                  }} />
+                </div>
+              );
+            })}
           </div>
         </div>
 

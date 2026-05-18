@@ -27,6 +27,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
   const [joining, setJoining] = useState(false);
   const [shareAsViewOnly, setShareAsViewOnly] = useState(false);
 
+  const isJoinMode = !!new URLSearchParams(window.location.search).get('room');
+
   const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(inputRoom)}${shareAsViewOnly ? '&mode=view' : ''}`;
 
   const handleCopy = useCallback(() => {
@@ -58,9 +60,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
               <Users size={22} color="#fff" />
             </div>
             <div>
-              <div className="section-title">Colaborar en tiempo real</div>
+              <div className="section-title">{isJoinMode ? 'Unirse a la sala' : 'Colaborar en tiempo real'}</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                Invita a tus amigos a editar juntos
+                {isJoinMode ? 'Ingresa tu nombre para entrar a la pizarra' : 'Invita a tus amigos a editar juntos'}
               </div>
             </div>
           </div>
@@ -126,59 +128,63 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
             />
           </div>
 
-          <div>
-            <div className="panel-label">ID de la sala</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                className="board-input"
-                value={inputRoom}
-                onChange={e => setInputRoom(e.target.value)}
-                placeholder="Nombre de sala..."
-                style={{ fontFamily: 'Fira Code, monospace', fontSize: 13 }}
-              />
-              <button
-                className="btn-secondary"
-                onClick={() => setInputRoom(generateRoom())}
-                title="Generar nuevo ID"
-                style={{ flex: '0 0 auto', padding: '8px 12px' }}
-              >
-                ↺
-              </button>
-            </div>
-          </div>
-
-          {/* Share link */}
-          <div>
-            <div className="panel-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              Enlace para compartir
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textTransform: 'none', color: 'var(--text-primary)' }}>
-                <input type="checkbox" checked={shareAsViewOnly} onChange={e => setShareAsViewOnly(e.target.checked)} />
-                Solo lectura
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{
-                flex: 1, padding: '8px 12px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid var(--border)',
-                borderRadius: 8, fontSize: 12,
-                color: 'var(--text-muted)',
-                fontFamily: 'Fira Code, monospace',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-              }}>
-                <Link2 size={12} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                {shareUrl}
+          {!isJoinMode && (
+            <>
+              <div>
+                <div className="panel-label">ID de la sala</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="board-input"
+                    value={inputRoom}
+                    onChange={e => setInputRoom(e.target.value)}
+                    placeholder="Nombre de sala..."
+                    style={{ fontFamily: 'Fira Code, monospace', fontSize: 13 }}
+                  />
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setInputRoom(generateRoom())}
+                    title="Generar nuevo ID"
+                    style={{ flex: '0 0 auto', padding: '8px 12px' }}
+                  >
+                    ↺
+                  </button>
+                </div>
               </div>
-              <button className="btn-secondary" onClick={handleCopy} style={{ flex: '0 0 auto', padding: '8px 12px' }}>
-                {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
-              </button>
-            </div>
-            {copied && (
-              <span style={{ fontSize: 12, color: '#34d399', marginTop: 4, display: 'block' }}>
-                ✓ Enlace copiado al portapapeles
-              </span>
-            )}
-          </div>
+
+              {/* Share link */}
+              <div>
+                <div className="panel-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  Enlace para compartir
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textTransform: 'none', color: 'var(--text-primary)' }}>
+                    <input type="checkbox" checked={shareAsViewOnly} onChange={e => setShareAsViewOnly(e.target.checked)} />
+                    Solo lectura
+                  </label>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{
+                    flex: 1, padding: '8px 12px',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 12,
+                    color: 'var(--text-muted)',
+                    fontFamily: 'Fira Code, monospace',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    <Link2 size={12} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+                    {shareUrl}
+                  </div>
+                  <button className="btn-secondary" onClick={handleCopy} style={{ flex: '0 0 auto', padding: '8px 12px' }}>
+                    {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+                  </button>
+                </div>
+                {copied && (
+                  <span style={{ fontSize: 12, color: '#34d399', marginTop: 4, display: 'block' }}>
+                    ✓ Enlace copiado al portapapeles
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Actions */}
@@ -204,13 +210,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
               {joining ? (
                 <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
               ) : <LogIn size={16} />}
-              {joining ? 'Conectando...' : 'Unirse / Crear sala'}
+              {joining ? 'Conectando...' : (isJoinMode ? 'Unirse a la sala' : 'Unirse / Crear sala')}
             </button>
           )}
         </div>
 
         <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
-          La colaboración usa WebRTC P2P — sin servidores intermediarios. Todos los datos se comparten directo entre los navegadores.
+          La colaboración usa WebSockets seguros. Todos los datos se comparten en tiempo real entre los usuarios de la sala.
         </p>
       </div>
     </div>

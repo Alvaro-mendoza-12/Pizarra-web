@@ -4,7 +4,7 @@ import {
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
   ZoomIn, ZoomOut, RotateCcw, Grid, Sigma, ArrowUpRight,
   Plus, Activity, Highlighter, StickyNote, Triangle,
-  Share2, Save, FolderOpen
+  Share2, Save, FolderOpen, Palette
 } from 'lucide-react';
 import type { Tool } from '../types';
 import { useBoardStore } from '../store/boardStore';
@@ -86,6 +86,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
   const { tool, color, strokeWidth, fontSize, showGrid, setTool, setColor, setStrokeWidth, setFontSize, setShowGrid, peers, roomId } = useBoardStore();
   const [showMathMenu, setShowMathMenu] = useState(false);
+  const [showProperties, setShowProperties] = useState(window.innerWidth > 768);
 
   const MATH_FORMULAS = [
     { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²', group: '2D' },
@@ -136,6 +137,12 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         <button className="toolbar-btn" onClick={p.onRedo} title="Rehacer (Ctrl+Y)"
           style={{ opacity: p.canRedo ? 1 : 0.35 }}>
           <Redo2 size={17} />
+        </button>
+
+        <div className="toolbar-sep-v" />
+
+        <button className={`toolbar-btn ${showProperties ? 'active' : ''}`} onClick={() => setShowProperties(!showProperties)} title="Ocultar/Mostrar colores">
+          <Palette size={17} />
         </button>
 
         <div className="toolbar-sep-v" />
@@ -248,6 +255,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
       </div>
 
       {/* ── Right Properties Panel ────────────────────────── */}
+      {showProperties && (
       <div className="glass-panel properties-toolbar">
         {/* Color picker */}
         <div style={{ width: '100%' }}>
@@ -333,6 +341,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
           </>
         )}
       </div>
+      )}
 
       {/* ── Math Formulas Panel ───────────────────────────── */}
       {showMathMenu && (

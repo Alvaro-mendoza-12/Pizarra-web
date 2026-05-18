@@ -1,6 +1,6 @@
 import { useRef, useCallback } from 'react';
 import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
+import { WebsocketProvider } from 'y-websocket';
 import { useBoardStore } from '../store/boardStore';
 import type { BoardElement } from '../types';
 
@@ -11,7 +11,7 @@ const USER_COLORS = [
 
 export function useCollaboration() {
   const docRef = useRef<Y.Doc | null>(null);
-  const providerRef = useRef<WebrtcProvider | null>(null);
+  const providerRef = useRef<WebsocketProvider | null>(null);
   const yElementsRef = useRef<Y.Array<any> | null>(null);
   const ignoreLocalRef = useRef(false);
 
@@ -36,9 +36,11 @@ export function useCollaboration() {
     const userColor = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
 
     try {
-      const provider = new WebrtcProvider(`pizarra-web-${room}`, doc, {
-        signaling: ['wss://signaling.yjs.dev', 'wss://y-webrtc-signaling-eu.herokuapp.com'],
-      });
+      const provider = new WebsocketProvider(
+        'wss://demos.yjs.dev/ws',
+        `pizarra-web-v2-${room}`,
+        doc
+      );
       providerRef.current = provider;
 
       // Set awareness (cursor/presence)
@@ -70,8 +72,8 @@ export function useCollaboration() {
       });
 
       // Handle initial sync
-      provider.on('synced', ({ synced }: { synced: boolean }) => {
-        if (synced) {
+      provider.on('sync', (isSynced: boolean) => {
+        if (isSynced) {
           const arr = yElements.toArray() as BoardElement[];
           if (arr.length === 0) {
             const currentLocalElements = useBoardStore.getState().elements;

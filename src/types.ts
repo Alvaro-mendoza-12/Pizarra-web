@@ -1,4 +1,20 @@
-export type Tool = 'select' | 'pan' | 'pen' | 'eraser' | 'rect' | 'circle' | 'line' | 'text' | 'image' | 'arrow' | 'axis' | 'graph';
+export type Tool =
+  | 'select'
+  | 'pan'
+  | 'pen'
+  | 'highlighter'
+  | 'eraser'
+  | 'rect'
+  | 'circle'
+  | 'triangle'
+  | 'line'
+  | 'text'
+  | 'image'
+  | 'arrow'
+  | 'axis'
+  | 'graph'
+  | 'sticky'
+  | 'laser';
 
 export interface BoardElement {
   id: string;
@@ -19,6 +35,11 @@ export interface BoardElement {
   scaleX?: number;
   scaleY?: number;
   isLocked?: boolean;
+  opacity?: number;
+  // Sticky note
+  stickyColor?: string;
+  // Highlighter
+  isHighlighter?: boolean;
 }
 
 export type Point = { x: number; y: number };

@@ -6,219 +6,96 @@ import { ShapeElement } from './ShapeElement';
 import { URLImage } from './URLImage';
 import { Toolbar } from './Toolbar';
 import { GraphFullscreen } from './GraphFullscreen';
-import { useHistory } from '../hooks/useHistory';
+import { ShareModal } from './ShareModal';
+import { useBoardStore } from '../store/boardStore';
+import { useCollaboration } from '../hooks/useCollaboration';
 
 const GRID_SIZE = 40;
 
-const MATH_FORMULAS = [
-  { label: 'Circunferencia', value: '(x - h)² + (y - k)² = r²' },
-  { label: 'Elipse', value: 'x²/a² + y²/b² = 1' },
-  { label: 'Hipérbola', value: 'x²/a² - y²/b² = 1' },
-  { label: 'Parábola', value: 'y = a(x - h)² + k' },
-  { label: 'Esfera', value: 'x² + y² + z² = r²' },
-  { label: 'Cilíndro', value: 'x² + y² = r²' },
-  { label: 'Elipsoide', value: 'x²/a² + y²/b² + z²/c² = 1' },
-  { label: 'Paraboloide Elíptico', value: 'z = x²/a² + y²/b²' },
-  { label: 'Paraboloide Hiperbólico', value: 'z = y²/b² - x²/a²' },
-  { label: 'Hiperboloide 1 hoja', value: 'x²/a² + y²/b² - z²/c² = 1' },
-  { label: 'Hiperboloide 2 hojas', value: 'z²/c² - x²/a² - y²/b² = 1' },
-  { label: 'Cono Elíptico', value: 'z²/c² = x²/a² + y²/b²' },
-  { label: 'Polares (x, y)', value: 'x = r cos(θ), y = r sin(θ)' },
-  { label: 'Polares: Caracol', value: 'r = a ± b cos(θ)' },
-  { label: 'Polares: Rosa', value: 'r = a cos(nθ)' },
-  { label: 'Polares: Espiral', value: 'r = a + bθ' },
-];
-
-function GridLines({ stageScale, stagePos }: { stageScale: number; stagePos: { x: number; y: number } }) {
+function GridLines({ scale, pos }: { scale: number; pos: { x: number; y: number } }) {
   const lines: React.ReactNode[] = [];
-  const w = window.innerWidth / stageScale + GRID_SIZE * 2;
-  const h = window.innerHeight / stageScale + GRID_SIZE * 2;
-  const startX = Math.floor(-stagePos.x / stageScale / GRID_SIZE) * GRID_SIZE;
-  const startY = Math.floor(-stagePos.y / stageScale / GRID_SIZE) * GRID_SIZE;
-  for (let x = startX; x < startX + w; x += GRID_SIZE)
-    lines.push(<Line key={`v${x}`} points={[x, startY, x, startY + h]} stroke="rgba(255,255,255,0.07)" strokeWidth={1 / stageScale} listening={false} />);
-  for (let y = startY; y < startY + h; y += GRID_SIZE)
-    lines.push(<Line key={`h${y}`} points={[startX, y, startX + w, y]} stroke="rgba(255,255,255,0.07)" strokeWidth={1 / stageScale} listening={false} />);
+  const w = window.innerWidth / scale + GRID_SIZE * 2;
+  const h = window.innerHeight / scale + GRID_SIZE * 2;
+  const sx = Math.floor(-pos.x / scale / GRID_SIZE) * GRID_SIZE;
+  const sy = Math.floor(-pos.y / scale / GRID_SIZE) * GRID_SIZE;
+  for (let x = sx; x < sx + w; x += GRID_SIZE)
+    lines.push(<Line key={`v${x}`} points={[x, sy, x, sy + h]} stroke="rgba(255,255,255,0.06)" strokeWidth={1 / scale} listening={false} />);
+  for (let y = sy; y < sy + h; y += GRID_SIZE)
+    lines.push(<Line key={`h${y}`} points={[sx, y, sx + w, y]} stroke="rgba(255,255,255,0.06)" strokeWidth={1 / scale} listening={false} />);
   return <>{lines}</>;
 }
 
-interface ElementWrapperProps {
-  el: BoardElement;
-  isDraggable: boolean;
-  onSelect: (el: BoardElement, e: any, additive: boolean) => void;
-  onChange: (id: string, attrs: any) => void;
-  onNode: (id: string, node: any) => void;
-  onDragStart: (id: string) => void;
-  onDragMove: (id: string, e: any) => void;
-}
-function ElementWrapper({ el, isDraggable, onSelect, onChange, onNode, onDragStart, onDragMove }: ElementWrapperProps) {
-  const handleSelect = useCallback((e: any, additive: boolean) => onSelect(el, e, additive), [el, onSelect]);
-  const handleChange = useCallback((attrs: any) => onChange(el.id, attrs), [el.id, onChange]);
-  const handleNode = useCallback((node: any) => onNode(el.id, node), [el.id, onNode]);
-  const handleDragStart = useCallback(() => onDragStart(el.id), [el.id, onDragStart]);
-  const handleDragMove = useCallback((e: any) => onDragMove(el.id, e), [el.id, onDragMove]);
-
-  if (el.type === 'image') {
-    return (
-      <URLImage
-        imageSrc={el.src!}
-        shapeProps={{ ...el, id: el.id }}
-        draggable={isDraggable}
-        onSelect={handleSelect}
-        onChange={handleChange}
-        onNode={handleNode}
-        onDragStart={handleDragStart}
-        onDragMove={handleDragMove}
-      />
-    );
-  }
-  return (
-    <ShapeElement
-      shapeProps={{ ...el, id: el.id }}
-      draggable={isDraggable}
-      onSelect={handleSelect}
-      onChange={handleChange}
-      onNode={handleNode}
-      onDragStart={handleDragStart}
-      onDragMove={handleDragMove}
-    />
-  );
-}
-
 export default function Whiteboard() {
-  const [elements, setElements] = useState<BoardElement[]>([]);
-  const { pushHistory, undoHistory, redoHistory, clearHistory, canUndo, canRedo } = useHistory([]);
+  const store = useBoardStore();
+  const { connect, disconnect, syncElements, updateCursor } = useCollaboration();
 
-  const undo = useCallback(() => setElements(undoHistory()), [undoHistory]);
-  const redo = useCallback(() => setElements(redoHistory()), [redoHistory]);
-
-  const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState('#ffffff');
-  const [strokeWidth, setStrokeWidth] = useState(5);
-  const [fontSize, setFontSize] = useState(22);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [showGrid, setShowGrid] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [stageScale, setStageScale] = useState(1);
-
-  // Marquee
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
   const isMarqueeActive = useRef(false);
-
-  // Inline text editor
-  const [textEditor, setTextEditor] = useState<{ screenX: number; screenY: number; canvasX: number; canvasY: number } | null>(null);
+  const [textEditor, setTextEditor] = useState<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
   const [textValue, setTextValue] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const [isGraphViewOpen, setIsGraphViewOpen] = useState(false);
-  const [showMathMenu, setShowMathMenu] = useState(false);
-
+  const [showGraph, setShowGraph] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const stageRef = useRef<any>(null);
   const trRef = useRef<any>(null);
-  const nodeRefs = useRef<{ [key: string]: any }>({});
+  const nodeRefs = useRef<{ [id: string]: any }>({});
+  const dragStartPos = useRef<{ [id: string]: { x: number; y: number } }>({});
+  const elementsRef = useRef(store.elements);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { elementsRef.current = store.elements; }, [store.elements]);
 
   useEffect(() => {
-    if (selectedIds.length > 0 && trRef.current) {
-      const nodes = selectedIds.map(id => nodeRefs.current[id]).filter(Boolean);
-      trRef.current.nodes(nodes);
-      trRef.current.getLayer().batchDraw();
+    if (store.selectedIds.length > 0 && trRef.current) {
+      trRef.current.nodes(store.selectedIds.map(id => nodeRefs.current[id]).filter(Boolean));
+      trRef.current.getLayer()?.batchDraw();
     } else if (trRef.current) {
       trRef.current.nodes([]);
-      trRef.current.getLayer().batchDraw();
+      trRef.current.getLayer()?.batchDraw();
     }
-  }, [selectedIds, elements]);
+  }, [store.selectedIds, store.elements]);
 
   useEffect(() => {
     if (textEditor) setTimeout(() => textareaRef.current?.focus(), 50);
   }, [textEditor]);
 
-  const getCanvasPos = useCallback(() => {
-    const stage = stageRef.current;
-    if (!stage) return { x: 0, y: 0 };
-    const p = stage.getPointerPosition();
-    if (!p) return { x: 0, y: 0 };
-    return { x: (p.x - stage.x()) / stage.scaleX(), y: (p.y - stage.y()) / stage.scaleY() };
+  // Check URL for room
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const room = params.get('room');
+    if (room) {
+      store.setRoomId(room);
+      setTimeout(() => setShowShare(true), 500);
+    }
   }, []);
 
-  const handleMouseDown = useCallback((e: any) => {
-    if (tool === 'pan') return;
-    const isOnStage = e.target === stageRef.current;
-
-    if (tool === 'select') {
-      if (isOnStage) {
-        setSelectedIds([]);
-        const pos = getCanvasPos();
-        marqueeStart.current = pos;
-        isMarqueeActive.current = false;
-        setMarquee(null);
-      }
-      return;
-    }
-
-    if (tool === 'text') {
-      const stage = stageRef.current;
-      if (!stage) return;
-      const canvasPos = getCanvasPos();
-      const stageBox = stage.container().getBoundingClientRect();
-      const pointer = stage.getPointerPosition();
-      setTextValue('');
-      setTextEditor({
-        screenX: pointer.x + stageBox.left,
-        screenY: pointer.y + stageBox.top,
-        canvasX: canvasPos.x,
-        canvasY: canvasPos.y,
-      });
-      return;
-    }
-
-    setIsDrawing(true);
-    setSelectedIds([]);
-    const pos = getCanvasPos();
-    const id = uuidv4();
-
-    const newEl: BoardElement = {
-      id,
-      type: tool,
-      x: pos.x,
-      y: pos.y,
-      stroke: tool === 'eraser' ? 'rgba(0,0,0,1)' : color,
-      strokeWidth: tool === 'eraser' ? strokeWidth * 4 : strokeWidth,
-      fill: (tool === 'rect' || tool === 'circle') ? 'transparent' : undefined,
-    };
-
-    if (tool === 'pen' || tool === 'eraser' || tool === 'line' || tool === 'arrow') {
-      newEl.points = [pos.x, pos.y, pos.x, pos.y];
-      newEl.x = 0; newEl.y = 0;
-    }
-    
-    if (tool === 'axis') {
-      newEl.width = 0; newEl.height = 0; // Fixed size in component
-    }
-
-    setElements([...elements, newEl]);
-  }, [tool, color, strokeWidth, elements, getCanvasPos, pushHistory]);
+  const getPos = useCallback(() => {
+    const s = stageRef.current;
+    if (!s) return { x: 0, y: 0 };
+    const p = s.getPointerPosition();
+    if (!p) return { x: 0, y: 0 };
+    return { x: (p.x - s.x()) / s.scaleX(), y: (p.y - s.y()) / s.scaleY() };
+  }, []);
 
   const handleMouseMove = useCallback(() => {
+    const { tool } = store;
     if (tool === 'select' && marqueeStart.current) {
-      const pos = getCanvasPos();
-      const sx = marqueeStart.current.x;
-      const sy = marqueeStart.current.y;
-      const w = Math.abs(pos.x - sx);
-      const h = Math.abs(pos.y - sy);
+      const pos = getPos();
+      const { x: sx, y: sy } = marqueeStart.current;
+      const w = Math.abs(pos.x - sx), h = Math.abs(pos.y - sy);
       if (w > 3 || h > 3) {
         isMarqueeActive.current = true;
         setMarquee({ x: Math.min(sx, pos.x), y: Math.min(sy, pos.y), w, h });
       }
       return;
     }
-
-    if (!isDrawing || elements.length === 0) return;
-    const pos = getCanvasPos();
-    const last = { ...elements[elements.length - 1] };
-
-    if (tool === 'pen' || tool === 'eraser') {
+    if (!isDrawing || store.elements.length === 0) return;
+    const pos = getPos();
+    const els = [...store.elements];
+    const last = { ...els[els.length - 1] };
+    if (tool === 'pen' || tool === 'eraser' || tool === 'highlighter') {
       last.points = [...(last.points || []), pos.x, pos.y];
     } else if (tool === 'line' || tool === 'arrow') {
       const pts = last.points || [pos.x, pos.y];
@@ -226,48 +103,85 @@ export default function Whiteboard() {
     } else if (tool === 'rect') {
       last.width = pos.x - (last.x || 0);
       last.height = pos.y - (last.y || 0);
-    } else if (tool === 'circle') {
-      const dx = pos.x - (last.x || 0);
-      const dy = pos.y - (last.y || 0);
+    } else if (tool === 'circle' || tool === 'triangle') {
+      const dx = pos.x - (last.x || 0), dy = pos.y - (last.y || 0);
       const r = Math.sqrt(dx * dx + dy * dy);
       last.width = r * 2; last.height = r * 2;
     }
+    els[els.length - 1] = last;
+    store.setElements(els);
 
-    const updated = [...elements];
-    updated[updated.length - 1] = last;
-    setElements(updated);
-  }, [tool, isDrawing, elements, getCanvasPos]);
+    // Sync cursor
+    if (isConnected) updateCursor(pos.x, pos.y);
+  }, [store, isDrawing, getPos, isConnected, updateCursor]);
+
+  const handleMouseDown = useCallback((e: any) => {
+    const { tool, color, strokeWidth, elements } = store;
+    if (tool === 'pan') return;
+    const isStage = e.target === stageRef.current;
+
+    if (tool === 'select') {
+      if (isStage) {
+        store.setSelectedIds([]);
+        marqueeStart.current = getPos();
+        isMarqueeActive.current = false;
+        setMarquee(null);
+      }
+      return;
+    }
+
+    if (tool === 'text' || tool === 'sticky') {
+      const s = stageRef.current;
+      if (!s) return;
+      const cp = getPos();
+      const box = s.container().getBoundingClientRect();
+      const pp = s.getPointerPosition();
+      setTextValue('');
+      setTextEditor({ sx: pp.x + box.left, sy: pp.y + box.top, cx: cp.x, cy: cp.y });
+      return;
+    }
+
+    setIsDrawing(true);
+    store.setSelectedIds([]);
+    const pos = getPos();
+    const id = uuidv4();
+    const newEl: BoardElement = {
+      id, type: tool, x: pos.x, y: pos.y,
+      stroke: tool === 'eraser' ? 'rgba(0,0,0,1)' : color,
+      strokeWidth: tool === 'eraser' ? strokeWidth * 4 : tool === 'highlighter' ? strokeWidth * 3 : strokeWidth,
+      fill: (tool === 'rect' || tool === 'circle' || tool === 'triangle') ? 'transparent' : undefined,
+      isHighlighter: tool === 'highlighter',
+    };
+    if (['pen', 'eraser', 'line', 'arrow', 'highlighter'].includes(tool)) {
+      newEl.points = [pos.x, pos.y, pos.x, pos.y];
+      newEl.x = 0; newEl.y = 0;
+    }
+    store.setElements([...elements, newEl]);
+  }, [store, getPos]);
 
   const handleMouseUp = useCallback(() => {
+    const { tool, elements } = store;
     if (tool === 'select' && marqueeStart.current) {
       if (isMarqueeActive.current && marquee) {
-        const mx1 = marquee.x, my1 = marquee.y, mx2 = marquee.x + marquee.w, my2 = marquee.y + marquee.h;
-        const selected = elements.filter(el => {
-          let minX, minY, maxX, maxY;
-          if (el.type === 'pen' || el.type === 'eraser' || el.type === 'line' || el.type === 'arrow') {
+        const { x: mx1, y: my1 } = marquee;
+        const mx2 = mx1 + marquee.w, my2 = my1 + marquee.h;
+        const sel = elements.filter(el => {
+          let minX: number, minY: number, maxX: number, maxY: number;
+          if (['pen', 'eraser', 'line', 'arrow', 'highlighter'].includes(el.type)) {
             const pts = el.points || [];
             if (!pts.length) return false;
             minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
             for (let i = 0; i < pts.length; i += 2) {
-              if (pts[i] < minX) minX = pts[i];
-              if (pts[i] > maxX) maxX = pts[i];
-              if (pts[i+1] < minY) minY = pts[i+1];
-              if (pts[i+1] > maxY) maxY = pts[i+1];
+              minX = Math.min(minX, pts[i]); maxX = Math.max(maxX, pts[i]);
+              minY = Math.min(minY, pts[i + 1]); maxY = Math.max(maxY, pts[i + 1]);
             }
-          } else if (el.type === 'text') {
-            minX = el.x || 0; minY = el.y || 0;
-            maxX = minX + 150; maxY = minY + (el.fontSize || 22) * 2;
           } else {
-            const x1 = el.x || 0;
-            const x2 = x1 + (el.width || 0);
-            minX = Math.min(x1, x2); maxX = Math.max(x1, x2);
-            const y1 = el.y || 0;
-            const y2 = y1 + (el.height || 0);
-            minY = Math.min(y1, y2); maxY = Math.max(y1, y2);
+            minX = el.x || 0; maxX = minX + (el.width || 100);
+            minY = el.y || 0; maxY = minY + (el.height || 50);
           }
           return !(maxX < mx1 || minX > mx2 || maxY < my1 || minY > my2);
-        }).map(el => el.id);
-        if (selected.length > 0) setSelectedIds(selected);
+        }).map(e => e.id);
+        if (sel.length) store.setSelectedIds(sel);
       }
       setMarquee(null);
       marqueeStart.current = null;
@@ -275,165 +189,130 @@ export default function Whiteboard() {
       return;
     }
     if (isDrawing) {
-      pushHistory(elements);
+      store.pushHistory(store.elements);
+      if (isConnected) syncElements(store.elements);
     }
     setIsDrawing(false);
-  }, [tool, marquee, elements, isDrawing, pushHistory]);
+  }, [store, marquee, isDrawing, isConnected, syncElements]);
 
   const commitText = useCallback(() => {
     if (!textEditor) return;
+    const { tool, color, fontSize, elements } = store;
     if (textValue.trim()) {
+      const isSt = tool === 'sticky';
       const newArr = [...elements, {
-        id: uuidv4(), type: 'text' as Tool,
-        x: textEditor.canvasX, y: textEditor.canvasY,
-        text: textValue, fill: color,
+        id: uuidv4(), type: isSt ? 'sticky' as Tool : 'text' as Tool,
+        x: textEditor.cx, y: textEditor.cy,
+        text: textValue, fill: isSt ? undefined : color,
         fontSize, fontFamily: 'Inter, sans-serif', strokeWidth: 0,
+        width: isSt ? 200 : undefined, height: isSt ? 200 : undefined,
+        stickyColor: isSt ? 'yellow' : undefined,
       }];
-      setElements(newArr);
-      pushHistory(newArr);
+      store.pushHistory(newArr);
+      if (isConnected) syncElements(newArr);
     }
-    setTextEditor(null);
-    setTextValue('');
-  }, [textEditor, textValue, elements, pushHistory, color, fontSize]);
-
-  const handleInsertFormula = useCallback((formula: string) => {
-    const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    const x = (center.x - stagePos.x) / stageScale;
-    const y = (center.y - stagePos.y) / stageScale;
-
-    const newArr = [...elements, {
-      id: uuidv4(), type: 'text' as Tool,
-      x, y, text: formula, fill: color,
-      fontSize: fontSize * 1.5, fontFamily: 'monospace', strokeWidth: 0,
-    }];
-    setElements(newArr);
-    pushHistory(newArr);
-  }, [elements, stagePos, stageScale, color, fontSize, pushHistory]);
-
-  const handleElementSelect = useCallback((el: BoardElement, e: any, additive: boolean) => {
-    if (tool !== 'select') return;
-    e.cancelBubble = true;
-    setSelectedIds(prev => additive
-      ? (prev.includes(el.id) ? prev.filter(i => i !== el.id) : [...prev, el.id])
-      : [el.id]
-    );
-  }, [tool]);
-
-  const elementsRef = useRef(elements);
-  useEffect(() => { elementsRef.current = elements; }, [elements]);
-
-  const handleNodeDragMove = useCallback((id: string, e: any) => {
-    if (selectedIds.length <= 1 || !selectedIds.includes(id)) return;
-    const startPos = dragStartPositions.current[id];
-    if (!startPos) return;
-    
-    // Calculate delta in canvas space
-    const dx = e.target.x() - startPos.x;
-    const dy = e.target.y() - startPos.y;
-
-    selectedIds.forEach(sid => {
-      if (sid === id) return;
-      const node = nodeRefs.current[sid];
-      const sPos = dragStartPositions.current[sid];
-      if (node && sPos) {
-        // Update nodes visually (fast, no state)
-        node.x(sPos.x + dx);
-        node.y(sPos.y + dy);
-      }
-    });
-    
-    if (trRef.current) trRef.current.getLayer()?.batchDraw();
-  }, [selectedIds]);
+    setTextEditor(null); setTextValue('');
+  }, [textEditor, textValue, store, isConnected, syncElements]);
 
   const handleChange = useCallback((id: string, attrs: any) => {
-    // Round to prevent sub-pixel jumping
-    const rounded = { ...attrs };
-    if (rounded.x !== undefined) rounded.x = Math.round(rounded.x * 10) / 10;
-    if (rounded.y !== undefined) rounded.y = Math.round(rounded.y * 10) / 10;
-
+    const { selectedIds } = store;
+    let updated: BoardElement[];
     if (selectedIds.length > 1 && selectedIds.includes(id)) {
-      // Update ALL selected elements from their physical nodes
-      const updated = elementsRef.current.map(e => {
+      updated = elementsRef.current.map(e => {
         if (selectedIds.includes(e.id)) {
           const node = nodeRefs.current[e.id];
           if (node) return { ...e, x: Math.round(node.x() * 10) / 10, y: Math.round(node.y() * 10) / 10 };
         }
         return e;
       });
-      setElements(updated);
-      pushHistory(updated);
     } else {
-      const updated = elementsRef.current.map(e => e.id === id ? { ...e, ...rounded } : e);
-      setElements(updated);
-      pushHistory(updated);
+      updated = elementsRef.current.map(e => e.id === id ? { ...e, ...attrs } : e);
     }
-  }, [selectedIds, pushHistory]);
-
-  const deleteSelected = useCallback(() => {
-    if (!selectedIds.length) return;
-    const filtered = elements.filter(e => !selectedIds.includes(e.id));
-    setElements(filtered);
-    pushHistory(filtered);
-    setSelectedIds([]);
-  }, [selectedIds, elements, pushHistory]);
+    store.pushHistory(updated);
+    if (isConnected) syncElements(updated);
+  }, [store, isConnected, syncElements]);
 
   const zoom = useCallback((factor: number) => {
     const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    setStageScale(prev => {
-      const newScale = Math.max(0.05, Math.min(10, prev * factor));
-      setStagePos(pos => ({
-        x: center.x - ((center.x - pos.x) / prev) * newScale,
-        y: center.y - ((center.y - pos.y) / prev) * newScale,
-      }));
-      return newScale;
+    const prev = store.stageScale;
+    const ns = Math.max(0.05, Math.min(10, prev * factor));
+    store.setStageScale(ns);
+    store.setStagePos({
+      x: center.x - ((center.x - store.stagePos.x) / prev) * ns,
+      y: center.y - ((center.y - store.stagePos.y) / prev) * ns,
     });
-  }, []);
+  }, [store]);
 
   const handleWheel = useCallback((e: any) => {
     e.evt.preventDefault();
-    const stage = stageRef.current;
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-    const mpt = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-    const dir = e.evt.deltaY > 0 ? -1 : 1;
-    const newScale = Math.max(0.05, Math.min(10, dir > 0 ? oldScale * 1.06 : oldScale / 1.06));
-    setStageScale(newScale);
-    setStagePos({ x: pointer.x - mpt.x * newScale, y: pointer.y - mpt.y * newScale });
-  }, []);
+    const s = stageRef.current;
+    const old = s.scaleX();
+    const ptr = s.getPointerPosition();
+    const mpt = { x: (ptr.x - s.x()) / old, y: (ptr.y - s.y()) / old };
+    const ns = Math.max(0.05, Math.min(10, e.evt.deltaY > 0 ? old / 1.06 : old * 1.06));
+    store.setStageScale(ns);
+    store.setStagePos({ x: ptr.x - mpt.x * ns, y: ptr.y - mpt.y * ns });
+  }, [store]);
 
   const addImage = useCallback((src: string) => {
     const img = new window.Image();
     img.src = src;
     img.onload = () => {
-      const newArr = [...elements, {
+      const newArr = [...store.elements, {
         id: uuidv4(), type: 'image' as Tool, src,
-        x: -stagePos.x / stageScale + window.innerWidth / 2 / stageScale - img.width / 2,
-        y: -stagePos.y / stageScale + window.innerHeight / 2 / stageScale - img.height / 2,
+        x: -store.stagePos.x / store.stageScale + window.innerWidth / 2 / store.stageScale - img.width / 2,
+        y: -store.stagePos.y / store.stageScale + window.innerHeight / 2 / store.stageScale - img.height / 2,
         width: img.width, height: img.height,
       }];
-      setElements(newArr);
-      pushHistory(newArr);
+      store.pushHistory(newArr);
+      if (isConnected) syncElements(newArr);
     };
-  }, [elements, pushHistory, stagePos, stageScale]);
+  }, [store, isConnected, syncElements]);
 
+  const saveBoard = useCallback(() => {
+    const data = JSON.stringify({ elements: store.elements, version: 1 });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    a.download = `pizarra-${Date.now()}.json`;
+    a.click();
+  }, [store.elements]);
+
+  const loadBoard = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.onchange = (e: any) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const fr = new FileReader();
+      fr.onload = ev => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          if (data.elements) { store.pushHistory(data.elements); if (isConnected) syncElements(data.elements); }
+        } catch { alert('Archivo inválido'); }
+      };
+      fr.readAsText(f);
+    };
+    input.click();
+  }, [store, isConnected, syncElements]);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') return;
-      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); }
-      const map: Record<string, Tool> = { v: 'select', p: 'pen', e: 'eraser', r: 'rect', c: 'circle', l: 'line', t: 'text' };
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); store.deleteSelected(); }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); store.undo(); }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); store.redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveBoard(); }
+      const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', e: 'eraser', r: 'rect', c: 'circle', l: 'line', t: 'text', n: 'sticky' };
       const k = e.key.toLowerCase();
-      if (map[k] && !e.ctrlKey) setTool(map[k]);
-      if (k === 'g' && !e.ctrlKey) setShowGrid(g => !g);
+      if (map[k] && !e.ctrlKey) store.setTool(map[k]);
+      if (k === 'g' && !e.ctrlKey) store.setShowGrid(!store.showGrid);
       if (e.key === '+' || e.key === '=') zoom(1.15);
       if (e.key === '-') zoom(0.85);
-      if (e.key === ' ') { e.preventDefault(); setTool('pan'); }
+      if (e.key === ' ') { e.preventDefault(); store.setTool('pan'); }
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') setTool('select');
-    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === ' ') store.setTool('select'); };
     const onPaste = (e: ClipboardEvent) => {
       if (!e.clipboardData) return;
       for (const item of Array.from(e.clipboardData.items)) {
@@ -447,54 +326,59 @@ export default function Whiteboard() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('paste', onPaste);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('paste', onPaste); };
-  }, [deleteSelected, undo, redo, addImage, zoom]);
-
-  const dragStartPositions = useRef<{ [key: string]: { x: number, y: number } }>({});
+  }, [store, zoom, addImage, saveBoard]);
 
   const handleNodeDragStart = useCallback((id: string) => {
-    if (!selectedIds.includes(id)) return;
-    selectedIds.forEach(sid => {
+    if (!store.selectedIds.includes(id)) return;
+    store.selectedIds.forEach(sid => {
       const node = nodeRefs.current[sid];
-      if (node) dragStartPositions.current[sid] = { x: node.x(), y: node.y() };
+      if (node) dragStartPos.current[sid] = { x: node.x(), y: node.y() };
     });
-  }, [selectedIds]);
+  }, [store.selectedIds]);
 
+  const handleNodeDragMove = useCallback((id: string, e: any) => {
+    if (store.selectedIds.length <= 1 || !store.selectedIds.includes(id)) return;
+    const sp = dragStartPos.current[id];
+    if (!sp) return;
+    const dx = e.target.x() - sp.x, dy = e.target.y() - sp.y;
+    store.selectedIds.forEach(sid => {
+      if (sid === id) return;
+      const node = nodeRefs.current[sid];
+      const s = dragStartPos.current[sid];
+      if (node && s) { node.x(s.x + dx); node.y(s.y + dy); }
+    });
+    if (trRef.current) trRef.current.getLayer()?.batchDraw();
+  }, [store.selectedIds]);
 
-  const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
+  const cursor = store.tool === 'pan' ? 'grab' : store.tool === 'select' ? 'default' : store.tool === 'eraser' ? 'cell' : 'crosshair';
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0f0f13', fontFamily: 'Inter, sans-serif', position: 'relative', touchAction: 'none' }}>
-
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0c0c10', position: 'relative', touchAction: 'none' }}>
       <Toolbar
-        tool={tool} color={color} strokeWidth={strokeWidth} fontSize={fontSize}
-        showGrid={showGrid} canUndo={canUndo} canRedo={canRedo}
-        selectedCount={selectedIds.length}
-        onTool={setTool} onColor={setColor} onStroke={setStrokeWidth}
-        onFontSize={setFontSize} onUndo={undo} onRedo={redo}
-        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) { setElements([]); clearHistory([]); setSelectedIds([]); } }}
+        canUndo={store.canUndo()} canRedo={store.canRedo()}
+        onUndo={store.undo} onRedo={store.redo}
+        selectedCount={store.selectedIds.length}
+        onDeleteSelected={store.deleteSelected}
+        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) store.clearBoard(); }}
         onExport={() => {
           if (!stageRef.current) return;
           const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
           const a = document.createElement('a'); a.download = 'pizarra.png'; a.href = uri;
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }}
-        onImport={e => {
-          const f = e.target.files?.[0];
-          if (f) { const fr = new FileReader(); fr.onload = ev => addImage(ev.target?.result as string); fr.readAsDataURL(f); }
-        }}
+        onImport={e => { const f = e.target.files?.[0]; if (f) { const fr = new FileReader(); fr.onload = ev => addImage(ev.target?.result as string); fr.readAsDataURL(f); } }}
         onZoomIn={() => zoom(1.2)} onZoomOut={() => zoom(0.8)}
-        onZoomReset={() => { setStageScale(1); setStagePos({ x: 0, y: 0 }); }}
-        onDeleteSelected={deleteSelected}
-        onToggleGrid={() => setShowGrid(g => !g)}
-        onInsertFormula={() => setShowMathMenu(!showMathMenu)}
-        onOpenGraphModal={() => setIsGraphViewOpen(true)}
+        onZoomReset={() => { store.setStageScale(1); store.setStagePos({ x: 0, y: 0 }); }}
+        onInsertFormula={() => {}}
+        onOpenGraphModal={() => setShowGraph(true)}
+        onShare={() => setShowShare(true)}
+        onSave={saveBoard} onLoad={loadBoard}
       />
 
-      {/* Inline text editor overlay */}
+      {/* Text editor overlay */}
       {textEditor && (
         <textarea
-          ref={textareaRef}
-          value={textValue}
+          ref={textareaRef} value={textValue}
           onChange={e => setTextValue(e.target.value)}
           onBlur={commitText}
           onKeyDown={e => {
@@ -502,161 +386,123 @@ export default function Whiteboard() {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
           }}
           style={{
-            position: 'fixed', zIndex: 200,
-            left: textEditor.screenX, top: textEditor.screenY,
-            minWidth: 140, minHeight: 44,
-            background: 'rgba(18,18,24,0.92)',
-            border: `2px solid ${color}`,
-            borderRadius: 10, color, outline: 'none', resize: 'both',
-            fontSize: `${fontSize * stageScale}px`,
-            fontFamily: 'Inter, sans-serif',
-            padding: '8px 12px', lineHeight: 1.4,
-            boxShadow: '0 0 0 4px rgba(99,102,241,0.15), 0 8px 32px rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(12px)',
+            position: 'fixed', zIndex: 500, left: textEditor.sx, top: textEditor.sy,
+            minWidth: 160, minHeight: 48,
+            background: store.tool === 'sticky' ? '#fde68a' : 'rgba(15,15,20,0.95)',
+            border: `2px solid ${store.tool === 'sticky' ? '#f59e0b' : store.color}`,
+            borderRadius: 10, color: store.tool === 'sticky' ? '#78350f' : store.color,
+            outline: 'none', resize: 'both',
+            fontSize: `${store.fontSize * store.stageScale}px`,
+            fontFamily: 'Inter, sans-serif', padding: '10px 14px', lineHeight: 1.5,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}
-          placeholder="Escribe aquí…&#10;Enter para confirmar&#10;Shift+Enter nueva línea"
+          placeholder={store.tool === 'sticky' ? 'Escribe tu nota...' : 'Escribe... (Enter para confirmar)'}
         />
       )}
 
-      {isGraphViewOpen && (
-        <GraphFullscreen 
-          onClose={() => setIsGraphViewOpen(false)}
-          onInsert={(newElements) => {
-            const updated = [...elements, ...newElements];
-            setElements(updated);
-            pushHistory(updated);
-            setIsGraphViewOpen(false);
-          }}
-        />
-      )}
-
-      {/* Math Formulas Panel (Overlay) */}
-      {showMathMenu && (
-        <div className="glass-panel" style={{
-          position: 'fixed', left: 80, top: '50%', transform: 'translateY(-50%)',
-          width: 240, padding: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 10,
-          maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase' }}>Fórmulas</span>
-            <button onClick={() => setShowMathMenu(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18 }}>×</button>
+      {/* Peer cursors */}
+      {store.peers.filter(p => p.cursor).map(p => {
+        const screenX = p.cursor!.x * store.stageScale + store.stagePos.x;
+        const screenY = p.cursor!.y * store.stageScale + store.stagePos.y;
+        return (
+          <div key={p.id} className="peer-cursor" style={{ left: screenX, top: screenY }}>
+            <svg width="20" height="20" viewBox="0 0 20 20">
+              <path d="M0 0 L0 16 L4 12 L8 20 L10 19 L6 11 L12 11 Z" fill={p.color} stroke="#fff" strokeWidth="1" />
+            </svg>
+            <div className="peer-cursor-name" style={{ background: p.color }}>{p.name}</div>
           </div>
-          {MATH_FORMULAS.map(f => (
-            <button 
-              key={f.label}
-              className="toolbar-btn" 
-              style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 14px', height: 'auto', textAlign: 'left', borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}
-              onClick={() => {
-                handleInsertFormula(f.value);
-                setShowMathMenu(false);
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{f.label}</span>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{f.value}</span>
-              </div>
-            </button>
-          ))}
-        </div>
+        );
+      })}
+
+      {showGraph && (
+        <GraphFullscreen
+          onClose={() => setShowGraph(false)}
+          onInsert={els => { const u = [...store.elements, ...els]; store.pushHistory(u); setShowGraph(false); }}
+        />
+      )}
+
+      {showShare && (
+        <ShareModal
+          onClose={() => setShowShare(false)}
+          isConnected={isConnected}
+          onConnect={(room, name) => {
+            store.setRoomId(room);
+            connect(room, name);
+            setIsConnected(true);
+            const url = new URL(window.location.href);
+            url.searchParams.set('room', room);
+            window.history.replaceState({}, '', url.toString());
+          }}
+          onDisconnect={() => { disconnect(); store.setRoomId(''); setIsConnected(false); }}
+        />
       )}
 
       <Stage
         width={window.innerWidth} height={window.innerHeight}
         ref={stageRef}
-        x={stagePos.x} y={stagePos.y}
-        scaleX={stageScale} scaleY={stageScale}
-        draggable={tool === 'pan'}
-        onDragEnd={(e: any) => setStagePos({ x: e.target.x(), y: e.target.y() })}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onTouchStart={handleMouseDown}
-        onTouchMove={handleMouseMove}
-        onTouchEnd={handleMouseUp}
-        onWheel={handleWheel}
-        style={{ cursor }}
+        x={store.stagePos.x} y={store.stagePos.y}
+        scaleX={store.stageScale} scaleY={store.stageScale}
+        draggable={store.tool === 'pan'}
+        onDragEnd={(e: any) => { if (e.target === stageRef.current) store.setStagePos({ x: e.target.x(), y: e.target.y() }); }}
+        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
+        onTouchStart={handleMouseDown} onTouchMove={handleMouseMove} onTouchEnd={handleMouseUp}
+        onWheel={handleWheel} style={{ cursor }}
       >
         <Layer>
-          {showGrid && <GridLines stageScale={stageScale} stagePos={stagePos} />}
-
-          {elements.map(el => {
-            const isSel = selectedIds.includes(el.id);
-            const isDraggable = isSel && tool === 'select';
+          {store.showGrid && <GridLines scale={store.stageScale} pos={store.stagePos} />}
+          {store.elements.map(el => {
+            const isSel = store.selectedIds.includes(el.id);
+            const isDrag = isSel && store.tool === 'select';
+            if (el.type === 'image') return (
+              <URLImage key={el.id} imageSrc={el.src!} shapeProps={{ ...el }} draggable={isDrag}
+                onSelect={(e, add) => { if (store.tool !== 'select') return; e.cancelBubble = true; store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]); }}
+                onChange={a => handleChange(el.id, a)}
+                onNode={n => { if (n) nodeRefs.current[el.id] = n; else delete nodeRefs.current[el.id]; }}
+                onDragStart={() => handleNodeDragStart(el.id)}
+                onDragMove={(e) => handleNodeDragMove(el.id, e)}
+              />
+            );
             return (
-              <ElementWrapper
-                key={el.id}
-                el={el}
-                isDraggable={isDraggable}
-                onSelect={handleElementSelect}
-                onChange={handleChange}
-                onNode={(id, node) => {
-                  if (node) nodeRefs.current[id] = node;
-                  else delete nodeRefs.current[id];
-                }}
-                onDragStart={handleNodeDragStart}
-                onDragMove={handleNodeDragMove}
+              <ShapeElement key={el.id} shapeProps={{ ...el }} draggable={isDrag}
+                onSelect={(e, add) => { if (store.tool !== 'select') return; e.cancelBubble = true; store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]); }}
+                onChange={a => handleChange(el.id, a)}
+                onNode={n => { if (n) nodeRefs.current[el.id] = n; else delete nodeRefs.current[el.id]; }}
+                onDragStart={() => handleNodeDragStart(el.id)}
+                onDragMove={(e) => handleNodeDragMove(el.id, e)}
               />
             );
           })}
 
-          <Transformer
-            ref={trRef}
-            boundBoxFunc={(oldBox, newBox) => {
-              if (newBox.width < 5 || newBox.height < 5) return oldBox;
-              return newBox;
-            }}
+          <Transformer ref={trRef}
+            boundBoxFunc={(o, n) => (n.width < 5 || n.height < 5) ? o : n}
             onTransformEnd={() => {
               if (!trRef.current) return;
               const nodes = trRef.current.nodes();
-              let updated = [...elements];
+              let updated = [...store.elements];
               nodes.forEach((node: any) => {
-                const elIdx = updated.findIndex(e => e.id === node.id());
-                if (elIdx !== -1) {
-                  const el = updated[elIdx];
-                  const scaleX = node.scaleX();
-                  const scaleY = node.scaleY();
-                  node.scaleX(1);
-                  node.scaleY(1);
-                  updated[elIdx] = {
-                    ...el,
-                    x: node.x(),
-                    y: node.y(),
-                    width: Math.max(5, (el.width || 0) * scaleX),
-                    height: Math.max(5, (el.height || 0) * scaleY),
-                    rotation: node.rotation(),
-                  };
+                const idx = updated.findIndex(e => e.id === node.id());
+                if (idx !== -1) {
+                  const el = updated[idx];
+                  const sx = node.scaleX(), sy = node.scaleY();
+                  node.scaleX(1); node.scaleY(1);
+                  updated[idx] = { ...el, x: node.x(), y: node.y(), width: Math.max(5, (el.width || 0) * sx), height: Math.max(5, (el.height || 0) * sy), rotation: node.rotation() };
                 }
               });
-              setElements(updated);
-              pushHistory(updated);
+              store.pushHistory(updated);
+              if (isConnected) syncElements(updated);
             }}
           />
 
-          {/* Marquee */}
           {marquee && (
-            <KonvaRect
-              x={marquee.x} y={marquee.y}
-              width={marquee.w} height={marquee.h}
-              fill="rgba(99,102,241,0.08)"
-              stroke="#818cf8"
-              strokeWidth={1.5 / stageScale}
-              dash={[6 / stageScale, 3 / stageScale]}
-              listening={false}
-            />
+            <KonvaRect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h}
+              fill="rgba(99,102,241,0.07)" stroke="#818cf8" strokeWidth={1.5 / store.stageScale}
+              dash={[6 / store.stageScale, 3 / store.stageScale]} listening={false} />
           )}
         </Layer>
       </Stage>
 
-      {/* Zoom badge */}
-      <div style={{
-        position: 'fixed', bottom: 44, right: 20, zIndex: 10,
-        color: 'rgba(255,255,255,0.45)', fontSize: 12,
-        background: 'rgba(25,25,35,0.7)', padding: '4px 12px', borderRadius: 20,
-        backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.08)',
-        pointerEvents: 'none', fontVariantNumeric: 'tabular-nums',
-      }}>
-        {Math.round(stageScale * 100)}%
+      <div className="zoom-badge">
+        {Math.round(store.stageScale * 100)}%
       </div>
     </div>
   );

@@ -13,15 +13,17 @@ import { useCollaboration } from '../hooks/useCollaboration';
 const GRID_SIZE = 40;
 
 function GridLines({ scale, pos }: { scale: number; pos: { x: number; y: number } }) {
+  const theme = useBoardStore(state => state.theme);
+  const strokeColor = theme === 'light' ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.06)';
   const lines: React.ReactNode[] = [];
   const w = window.innerWidth / scale + GRID_SIZE * 2;
   const h = window.innerHeight / scale + GRID_SIZE * 2;
   const sx = Math.floor(-pos.x / scale / GRID_SIZE) * GRID_SIZE;
   const sy = Math.floor(-pos.y / scale / GRID_SIZE) * GRID_SIZE;
   for (let x = sx; x < sx + w; x += GRID_SIZE)
-    lines.push(<Line key={`v${x}`} points={[x, sy, x, sy + h]} stroke="rgba(255,255,255,0.06)" strokeWidth={1 / scale} listening={false} />);
+    lines.push(<Line key={`v${x}`} points={[x, sy, x, sy + h]} stroke={strokeColor} strokeWidth={1 / scale} listening={false} />);
   for (let y = sy; y < sy + h; y += GRID_SIZE)
-    lines.push(<Line key={`h${y}`} points={[sx, y, sx + w, y]} stroke="rgba(255,255,255,0.06)" strokeWidth={1 / scale} listening={false} />);
+    lines.push(<Line key={`h${y}`} points={[sx, y, sx + w, y]} stroke={strokeColor} strokeWidth={1 / scale} listening={false} />);
   return <>{lines}</>;
 }
 
@@ -354,7 +356,7 @@ export default function Whiteboard() {
   const cursor = store.tool === 'pan' ? 'grab' : store.tool === 'select' ? 'default' : store.tool === 'eraser' ? 'cell' : 'crosshair';
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0c0c10', position: 'relative', touchAction: 'none' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)', position: 'relative', touchAction: 'none' }}>
       <Toolbar
         canUndo={store.canUndo()} canRedo={store.canRedo()}
         onUndo={store.undo} onRedo={store.redo}
@@ -449,8 +451,12 @@ export default function Whiteboard() {
         onTouchStart={handleMouseDown} onTouchMove={handleMouseMove} onTouchEnd={handleMouseUp}
         onWheel={handleWheel} style={{ cursor }}
       >
+        {store.showGrid && (
+          <Layer>
+            <GridLines scale={store.stageScale} pos={store.stagePos} />
+          </Layer>
+        )}
         <Layer>
-          {store.showGrid && <GridLines scale={store.stageScale} pos={store.stagePos} />}
           {store.elements.map(el => {
             const isSel = store.selectedIds.includes(el.id);
             const isDrag = isSel && store.tool === 'select';

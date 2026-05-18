@@ -116,11 +116,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
   return (
     <>
       {/* ── Top Bar ──────────────────────────────────────── */}
-      <div className="glass-panel" style={{
-        position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 100, display: 'flex', gap: 4, padding: '8px 12px',
-        alignItems: 'center', animation: 'slideInLeft 0.3s ease'
-      }}>
+      <div className="glass-panel top-toolbar">
         {/* Logo */}
         <div style={{
           width: 30, height: 30, borderRadius: 8,
@@ -213,12 +209,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
       </div>
 
       {/* ── Left Tools Sidebar ────────────────────────────── */}
-      <div className="glass-panel" style={{
-        position: 'fixed', top: '50%', left: 16, transform: 'translateY(-50%)',
-        zIndex: 100, display: 'flex', flexDirection: 'column', gap: 2,
-        padding: 8, maxHeight: '88vh', overflowY: 'auto', scrollbarWidth: 'none',
-        animation: 'slideInLeft 0.3s ease'
-      }}>
+      <div className="glass-panel left-toolbar">
         {TOOL_GROUPS.map((group, gi) => (
           <React.Fragment key={group.label}>
             {gi > 0 && <div className="toolbar-sep-h" />}
@@ -257,11 +248,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
       </div>
 
       {/* ── Right Properties Panel ────────────────────────── */}
-      <div className="glass-panel" style={{
-        position: 'fixed', top: '50%', right: 16, transform: 'translateY(-50%)',
-        zIndex: 100, display: 'flex', flexDirection: 'column', gap: 16,
-        padding: '16px 14px', alignItems: 'center', minWidth: 68
-      }}>
+      <div className="glass-panel properties-toolbar">
         {/* Color picker */}
         <div style={{ width: '100%' }}>
           <div className="panel-label">Color</div>
@@ -349,13 +336,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
 
       {/* ── Math Formulas Panel ───────────────────────────── */}
       {showMathMenu && (
-        <div className="glass-panel" style={{
-          position: 'fixed', left: 76, top: '50%', transform: 'translateY(-50%)',
-          width: 280, padding: 14, zIndex: 200,
-          display: 'flex', flexDirection: 'column', gap: 8,
-          maxHeight: '82vh', overflowY: 'auto',
-          animation: 'slideInLeft 0.2s ease'
-        }}>
+        <div className="math-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: -0.3 }}>Fórmulas Matemáticas</span>
             <button onClick={() => setShowMathMenu(false)} className="toolbar-btn" style={{ width: 28, height: 28 }}>✕</button>

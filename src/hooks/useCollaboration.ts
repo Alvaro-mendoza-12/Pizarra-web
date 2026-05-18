@@ -73,7 +73,14 @@ export function useCollaboration() {
       provider.on('synced', ({ synced }: { synced: boolean }) => {
         if (synced) {
           const arr = yElements.toArray() as BoardElement[];
-          setElements(arr);
+          if (arr.length === 0) {
+            const currentLocalElements = useBoardStore.getState().elements;
+            if (currentLocalElements.length > 0) {
+              syncElements(currentLocalElements);
+            }
+          } else {
+            setElements(arr);
+          }
         }
       });
 

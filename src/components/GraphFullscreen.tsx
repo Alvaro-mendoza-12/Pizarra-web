@@ -178,9 +178,9 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#0a0a0c', display: 'flex', fontFamily: 'Inter, sans-serif' }}>
+    <div className="graph-container">
       {/* Sidebar */}
-      <div style={{ width: 350, borderRight: '1px solid rgba(255,255,255,0.1)', background: '#121218', display: 'flex', flexDirection: 'column', boxShadow: '10px 0 30px rgba(0,0,0,0.5)', zIndex: 10 }}>
+      <div className="graph-sidebar">
         <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', padding: 8, borderRadius: 8, display: 'flex' }}><ArrowLeft size={20}/></button>
           <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: -0.5 }}>GeoGebra Studio</span>
@@ -256,12 +256,12 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
       </div>
 
       {/* Main Graph Area with Plotly */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0c' }}>
+      <div className="graph-main">
         <Plot
           data={plotData}
+          useResizeHandler={true}
           layout={{
-            width: window.innerWidth - 350,
-            height: window.innerHeight,
+            autosize: true,
             paper_bgcolor: '#0a0a0c',
             plot_bgcolor: '#0a0a0c',
             margin: { l: 0, r: 0, t: 0, b: 0 },

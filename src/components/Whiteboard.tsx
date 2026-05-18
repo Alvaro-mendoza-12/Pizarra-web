@@ -116,8 +116,8 @@ export default function Whiteboard() {
   }, [store, isDrawing, getPos, isConnected, updateCursor]);
 
   const handleMouseDown = useCallback((e: any) => {
-    const { tool, color, strokeWidth, elements } = store;
-    if (tool === 'pan') return;
+    const { tool, color, strokeWidth, elements, isReadOnly } = store;
+    if (tool === 'pan' || isReadOnly) return;
     const isStage = e.target === stageRef.current;
 
     if (tool === 'select') {
@@ -304,7 +304,8 @@ export default function Whiteboard() {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); store.undo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); store.redo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveBoard(); }
-      const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', e: 'eraser', r: 'rect', c: 'circle', l: 'line', t: 'text', n: 'sticky' };
+      if (store.isReadOnly) return;
+      const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', e: e.shiftKey ? 'eraser-stroke' : 'eraser', r: 'rect', c: 'circle', l: 'line', t: 'text', n: 'sticky' };
       const k = e.key.toLowerCase();
       if (map[k] && !e.ctrlKey) store.setTool(map[k]);
       if (k === 'g' && !e.ctrlKey) store.setShowGrid(!store.showGrid);
@@ -455,7 +456,20 @@ export default function Whiteboard() {
             const isDrag = isSel && store.tool === 'select';
             if (el.type === 'image') return (
               <URLImage key={el.id} imageSrc={el.src!} shapeProps={{ ...el }} draggable={isDrag}
-                onSelect={(e, add) => { if (store.tool !== 'select') return; e.cancelBubble = true; store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]); }}
+                onSelect={(e, add) => { 
+                  if (store.isReadOnly) return;
+                  if (store.tool === 'eraser-stroke') {
+                    e.cancelBubble = true;
+                    const filtered = store.elements.filter(i => i.id !== el.id);
+                    store.setElements(filtered);
+                    store.pushHistory(filtered);
+                    if (isConnected) syncElements(filtered);
+                    return;
+                  }
+                  if (store.tool !== 'select') return;
+                  e.cancelBubble = true;
+                  store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]);
+                }}
                 onChange={a => handleChange(el.id, a)}
                 onNode={n => { if (n) nodeRefs.current[el.id] = n; else delete nodeRefs.current[el.id]; }}
                 onDragStart={() => handleNodeDragStart(el.id)}
@@ -464,7 +478,20 @@ export default function Whiteboard() {
             );
             return (
               <ShapeElement key={el.id} shapeProps={{ ...el }} draggable={isDrag}
-                onSelect={(e, add) => { if (store.tool !== 'select') return; e.cancelBubble = true; store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]); }}
+                onSelect={(e, add) => { 
+                  if (store.isReadOnly) return;
+                  if (store.tool === 'eraser-stroke') {
+                    e.cancelBubble = true;
+                    const filtered = store.elements.filter(i => i.id !== el.id);
+                    store.setElements(filtered);
+                    store.pushHistory(filtered);
+                    if (isConnected) syncElements(filtered);
+                    return;
+                  }
+                  if (store.tool !== 'select') return;
+                  e.cancelBubble = true;
+                  store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]);
+                }}
                 onChange={a => handleChange(el.id, a)}
                 onNode={n => { if (n) nodeRefs.current[el.id] = n; else delete nodeRefs.current[el.id]; }}
                 onDragStart={() => handleNodeDragStart(el.id)}

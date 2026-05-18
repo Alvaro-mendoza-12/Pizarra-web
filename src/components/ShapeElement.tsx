@@ -34,6 +34,11 @@ export const ShapeElement = ({
   const commonProps = {
     onClick: (e: any) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); },
     onTap: (e: any) => { e.cancelBubble = true; onSelect(e, false); },
+    onMouseEnter: (e: any) => {
+      if (e.evt.buttons === 1 && onSelect) {
+        onSelect(e, false);
+      }
+    },
     ref: onNode,
     ...shapeProps,
     draggable,

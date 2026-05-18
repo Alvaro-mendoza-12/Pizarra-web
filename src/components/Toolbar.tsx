@@ -33,7 +33,8 @@ const TOOL_GROUPS = [
     tools: [
       { tool: 'pen' as Tool, icon: Pen, label: 'Lápiz', shortcut: 'P' },
       { tool: 'highlighter' as Tool, icon: Highlighter, label: 'Marcador', shortcut: 'H' },
-      { tool: 'eraser' as Tool, icon: Eraser, label: 'Borrador', shortcut: 'E' },
+      { tool: 'eraser' as Tool, icon: Eraser, label: 'Borrador rastro', shortcut: 'E' },
+      { tool: 'eraser-stroke' as Tool, icon: Eraser, label: 'Borrador trazo', shortcut: 'Shift+E' },
     ]
   },
   {
@@ -276,20 +277,28 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
             ))}
           </div>
           {/* Custom color */}
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
             <input
               type="color"
               value={color}
               onChange={e => setColor(e.target.value)}
               title="Color personalizado"
               style={{
-                width: 22, height: 22, border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: 'none', padding: 0, outline: '1px solid var(--border)'
+                width: 24, height: 24, border: 'none', borderRadius: 4, cursor: 'pointer',
+                background: 'none', padding: 0, outline: '1px solid var(--border)', flexShrink: 0
               }}
             />
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'Fira Code, monospace' }}>
-              {color.toUpperCase()}
-            </span>
+            <input
+              type="text"
+              value={color}
+              onChange={e => setColor(e.target.value)}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+                borderRadius: 4, color: 'var(--text-primary)', fontSize: 11,
+                fontFamily: 'Fira Code, monospace', width: '100%', padding: '4px 6px',
+                outline: 'none'
+              }}
+            />
           </div>
         </div>
 

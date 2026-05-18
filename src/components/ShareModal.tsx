@@ -25,8 +25,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
   const [inputName, setInputName] = useState(userName);
   const [copied, setCopied] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [shareAsViewOnly, setShareAsViewOnly] = useState(false);
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(inputRoom)}`;
+  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(inputRoom)}${shareAsViewOnly ? '&mode=view' : ''}`;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(shareUrl).then(() => {
@@ -148,7 +149,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
 
           {/* Share link */}
           <div>
-            <div className="panel-label">Enlace para compartir</div>
+            <div className="panel-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              Enlace para compartir
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textTransform: 'none', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={shareAsViewOnly} onChange={e => setShareAsViewOnly(e.target.checked)} />
+                Solo lectura
+              </label>
+            </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{
                 flex: 1, padding: '8px 12px',

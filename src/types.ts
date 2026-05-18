@@ -4,6 +4,7 @@ export type Tool =
   | 'pen'
   | 'highlighter'
   | 'eraser'
+  | 'eraser-stroke'
   | 'rect'
   | 'circle'
   | 'triangle'

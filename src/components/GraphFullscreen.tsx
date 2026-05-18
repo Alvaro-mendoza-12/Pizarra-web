@@ -1,13 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { Stage, Layer, Line, Text, Group } from 'react-konva';
+// @ts-ignore
+import Plotly from 'plotly.js-dist-min';
+// @ts-ignore
+import createPlotlyComponent from 'react-plotly.js/factory';
+import * as math from 'mathjs';
 import { Plus, Trash2, Check, ArrowLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+
+const PlotFactory = (createPlotlyComponent as any).default || createPlotlyComponent;
+const Plot = PlotFactory(Plotly);
 
 interface FunctionItem {
   id: string;
   expression: string;
   color: string;
   visible: boolean;
+  type: '2d' | '3d';
 }
 
 interface GraphFullscreenProps {
@@ -15,17 +23,16 @@ interface GraphFullscreenProps {
   onInsert: (elements: any[]) => void;
 }
 
+const COLORS = ['#818cf8', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+
 export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onInsert }) => {
   const [functions, setFunctions] = useState<FunctionItem[]>([
-    { id: '1', expression: 'x^2 + y^2 = 25', color: '#818cf8', visible: true }
+    { id: '1', expression: 'x^2', color: '#818cf8', visible: true, type: '2d' }
   ]);
-  const [viewport, setViewport] = useState({ x: window.innerWidth / 2 + 100, y: window.innerHeight / 2, scale: 40 });
   const [is3D, setIs3D] = useState(false);
 
-  const COLORS = ['#818cf8', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
-
   const addFunction = () => {
-    setFunctions([...functions, { id: uuidv4(), expression: '', color: COLORS[functions.length % COLORS.length], visible: true }]);
+    setFunctions([...functions, { id: uuidv4(), expression: '', color: COLORS[functions.length % COLORS.length], visible: true, type: is3D ? '3d' : '2d' }]);
   };
 
   const removeFunction = (id: string) => {
@@ -41,132 +48,160 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
   };
 
   const plotData = useMemo(() => {
-    return functions.filter(f => f.visible && f.expression).map(f => {
-      const pts: number[] = [];
-      const exprRaw = f.expression.toLowerCase().replace(/^(f\(x\)|y)\s*=\s*/, '');
-      const isImplicit = exprRaw.includes('=') && !exprRaw.startsWith('r=');
-      
-      const prepareExpr = (raw: string) => raw
-        .replace(/\^/g, '**')
-        .replace(/(\d)([a-z\(])/g, '$1*$2')
-        .replace(/([a-z\)])(\d)/g, '$1*$2')
-        .replace(/([a-z\)])([a-z\(])/g, '$1*$2')
-        .replace(/sin/g, 'Math.sin').replace(/cos/g, 'Math.cos').replace(/tan/g, 'Math.tan')
-        .replace(/sqrt/g, 'Math.sqrt').replace(/pow/g, 'Math.pow').replace(/pi/g, 'Math.PI')
-        .replace(/abs/g, 'Math.abs').replace(/exp/g, 'Math.exp').replace(/log/g, 'Math.log');
-
+    const data: any[] = [];
+    
+    functions.filter(f => f.visible && f.expression).forEach(f => {
       try {
-        if (isImplicit) {
-          const [leftSide, rightSide] = exprRaw.split('=').map(prepareExpr);
-          const evalFn = new Function('x', 'y', `return (${leftSide}) - (${rightSide})`);
+        let exprRaw = f.expression.toLowerCase().replace(/\s+/g, '');
+        
+        // --- 2D GRAPHING ---
+        if (!is3D) {
+          if (exprRaw.startsWith('r=')) {
+            // Polar
+            const expr = exprRaw.slice(2);
+            const node = math.parse(expr);
+            const compiled = node.compile();
+            const theta: number[] = [];
+            const r: number[] = [];
+            for (let t = 0; t <= Math.PI * 4; t += 0.05) {
+              theta.push(t);
+              r.push(compiled.evaluate({ theta: t, t: t }));
+            }
+            // Convert to cartesian for plotting
+            const x = r.map((rad, i) => rad * Math.cos(theta[i]));
+            const y = r.map((rad, i) => rad * Math.sin(theta[i]));
+            data.push({ x, y, type: 'scatter', mode: 'lines', line: { color: f.color, width: 3 }, name: f.expression });
+          } else {
+            // Y(x) explicitly
+            if (exprRaw.includes('y=')) exprRaw = exprRaw.split('y=')[1];
+            else if (exprRaw.includes('f(x)=')) exprRaw = exprRaw.split('f(x)=')[1];
+            
+            const node = math.parse(exprRaw);
+            const compiled = node.compile();
+            const x = [];
+            const y = [];
+            for (let i = -20; i <= 20; i += 0.2) {
+              x.push(i);
+              y.push(compiled.evaluate({ x: i }));
+            }
+            data.push({ x, y, type: 'scatter', mode: 'lines', line: { color: f.color, width: 3 }, name: f.expression });
+          }
+        } 
+        // --- 3D GRAPHING ---
+        else {
+          // Explicit z = f(x, y)
+          if (exprRaw.includes('z=')) exprRaw = exprRaw.split('z=')[1];
+          else if (exprRaw.includes('f(x,y)=')) exprRaw = exprRaw.split('f(x,y)=')[1];
+
+          const node = math.parse(exprRaw);
+          const compiled = node.compile();
+
+          const x = [];
+          const y = [];
+          const z = [];
+          const steps = 40;
+          const range = 10;
+          for (let i = -range; i <= range; i += (range * 2) / steps) {
+            x.push(i);
+            y.push(i);
+          }
           
-          const step = 0.12;
-          const range = 18;
-          const threshold = 0.45;
-          for (let x = -range; x <= range; x += step) {
-            for (let y = -range; y <= range; y += step) {
-              const val = evalFn(x, y);
-              if (Math.abs(val) < threshold) {
-                // Scatter points for implicit to avoid connection mess
-                pts.push(x * viewport.scale, -y * viewport.scale, x * viewport.scale + 0.1, -y * viewport.scale);
-                pts.push(NaN, NaN);
+          for (let i = 0; i < y.length; i++) {
+            const zRow = [];
+            for (let j = 0; j < x.length; j++) {
+              try {
+                const val = compiled.evaluate({ x: x[j], y: y[i] });
+                // Limit very large values to prevent plot distortion
+                zRow.push(Math.max(-50, Math.min(50, val)));
+              } catch {
+                zRow.push(NaN);
               }
             }
+            z.push(zRow);
           }
-        } else if (exprRaw.startsWith('r=')) {
-          const expr = prepareExpr(exprRaw.slice(2));
-          const evalFn = new Function('t', `return ${expr}`);
-          for (let t = 0; t <= Math.PI * 4; t += 0.02) {
-            const r = evalFn(t);
-            if (!isNaN(r)) pts.push(r * Math.cos(t) * viewport.scale, -r * Math.sin(t) * viewport.scale);
-          }
-        } else if (exprRaw.includes(',')) {
-          const parts = exprRaw.split(',').map(prepareExpr);
-          const evalX = new Function('t', `return ${parts[0]}`);
-          const evalY = new Function('t', `return ${parts[1]}`);
-          for (let t = -10; t <= 10; t += 0.02) {
-            const x = evalX(t); const y = evalY(t);
-            if (!isNaN(x) && !isNaN(y)) pts.push(x * viewport.scale, -y * viewport.scale);
-          }
-        } else {
-          const expr = prepareExpr(exprRaw);
-          const evalFn = new Function('x', `return ${expr}`);
-          for (let x = -50; x <= 50; x += 0.05) {
-            const y = evalFn(x);
-            if (!isNaN(y) && Math.abs(y) < 1000) pts.push(x * viewport.scale, -y * viewport.scale);
-          }
+
+          data.push({
+            x, y, z,
+            type: 'surface',
+            colorscale: [[0, f.color], [1, f.color]], // monochromatic surface matching the color
+            opacity: 0.8,
+            showscale: false,
+            name: f.expression
+          });
         }
-      } catch (e) { console.error(e); }
-      return { id: f.id, points: pts, color: f.color, isImplicit };
+      } catch (e) {
+        console.warn('Math parse error:', e);
+      }
     });
-  }, [functions, viewport.scale]);
+
+    return data;
+  }, [functions, is3D]);
 
   const handleInsert = () => {
-    const elementsToInsert = plotData.filter(d => d.points.length > 0).map(d => {
+    // Basic mapping of 2D data to strokes for the whiteboard
+    if (is3D) {
+      alert("La inserción de gráficos 3D en la pizarra 2D aún no está soportada. Por favor toma una captura de pantalla.");
+      return;
+    }
+
+    const elementsToInsert = plotData.filter(d => d.x && d.x.length > 0).map(d => {
       let minX = Infinity, minY = Infinity;
-      for(let i=0; i<d.points.length; i+=2) {
-        minX = Math.min(minX, d.points[i]);
-        minY = Math.min(minY, d.points[i+1]);
+      const points = [];
+      const scale = 20; // scale factor
+      
+      for(let i = 0; i < d.x.length; i++) {
+        if (!isNaN(d.y[i]) && Math.abs(d.y[i]) < 1000) {
+          const px = d.x[i] * scale;
+          const py = -d.y[i] * scale; // invert Y for canvas
+          points.push(px, py);
+          minX = Math.min(minX, px);
+          minY = Math.min(minY, py);
+        }
       }
       
-      if (minX === Infinity) return null;
+      if (points.length === 0) return null;
 
-      const relativePoints = d.points.map((p, i) => i % 2 === 0 ? p - minX : p - minY);
+      const relativePoints = points.map((p, i) => i % 2 === 0 ? p - minX : p - minY);
 
       return {
         id: uuidv4(),
         type: 'pen',
-        x: minX,
-        y: minY,
+        x: window.innerWidth / 2 + minX,
+        y: window.innerHeight / 2 + minY,
         points: relativePoints,
-        stroke: d.color,
+        stroke: d.line?.color || '#fff',
         strokeWidth: 3
       };
     }).filter(e => e !== null);
+    
     onInsert(elementsToInsert as any[]);
   };
-
-  const gridLines = useMemo(() => {
-    const lines = [];
-    const step = viewport.scale;
-    
-    // Grid density
-    const subStep = step / 5;
-    for (let x = -100; x <= 100; x++) {
-      const px = x * subStep;
-      if (Math.abs(px) < 2000) {
-        lines.push(<Line key={`vs${x}`} points={[px, -2000, px, 2000]} stroke="rgba(255,255,255,0.03)" strokeWidth={1} />);
-      }
-    }
-    for (let y = -100; y <= 100; y++) {
-      const py = y * subStep;
-      if (Math.abs(py) < 2000) {
-        lines.push(<Line key={`hs${y}`} points={[-2000, py, 2000, py]} stroke="rgba(255,255,255,0.03)" strokeWidth={1} />);
-      }
-    }
-
-    // Vertical Main
-    for (let x = -50; x <= 50; x++) {
-      const px = x * step;
-      lines.push(<Line key={`v${x}`} points={[px, -2000, px, 2000]} stroke={x === 0 ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)'} strokeWidth={x === 0 ? 2 : 1} />);
-      if (x !== 0) lines.push(<Text key={`tx${x}`} text={String(x)} x={px - 5} y={5} fill="rgba(255,255,255,0.4)" fontSize={11} fontWeight="bold" />);
-    }
-    // Horizontal Main
-    for (let y = -50; y <= 50; y++) {
-      const py = y * step;
-      lines.push(<Line key={`h${y}`} points={[-2000, py, 2000, py]} stroke={y === 0 ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)'} strokeWidth={y === 0 ? 2 : 1} />);
-      if (y !== 0) lines.push(<Text key={`ty${y}`} text={String(-y)} x={5} y={py - 5} fill="rgba(255,255,255,0.4)" fontSize={11} fontWeight="bold" />);
-    }
-    return lines;
-  }, [viewport.scale]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#0a0a0c', display: 'flex', fontFamily: 'Inter, sans-serif' }}>
       {/* Sidebar */}
-      <div style={{ width: 350, borderRight: '1px solid rgba(255,255,255,0.1)', background: '#121218', display: 'flex', flexDirection: 'column', boxShadow: '10px 0 30px rgba(0,0,0,0.5)' }}>
+      <div style={{ width: 350, borderRight: '1px solid rgba(255,255,255,0.1)', background: '#121218', display: 'flex', flexDirection: 'column', boxShadow: '10px 0 30px rgba(0,0,0,0.5)', zIndex: 10 }}>
         <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', padding: 8, borderRadius: 8, display: 'flex' }}><ArrowLeft size={20}/></button>
-          <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: -0.5 }}>GeoGebra Math</span>
+          <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: -0.5 }}>GeoGebra Studio</span>
+        </div>
+
+        {/* Mode Toggle */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: 4 }}>
+            <button 
+              onClick={() => setIs3D(false)}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, background: !is3D ? '#6366f1' : 'transparent', color: !is3D ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'all 0.2s' }}
+            >
+              Plano 2D
+            </button>
+            <button 
+              onClick={() => setIs3D(true)}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, background: is3D ? '#f43f5e' : 'transparent', color: is3D ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'all 0.2s' }}
+            >
+              Espacio 3D
+            </button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -186,7 +221,7 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
                 <input 
                   value={f.expression}
                   onChange={(e) => updateFunction(f.id, e.target.value)}
-                  placeholder="Ej: x^2 + y^2 = 25"
+                  placeholder={is3D ? "Ej: z = x^2 + y^2" : "Ej: y = sin(x)"}
                   style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: 16, fontFamily: 'Fira Code, monospace' }}
                 />
                 <button onClick={() => removeFunction(f.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer' }}><Trash2 size={16}/></button>
@@ -214,77 +249,39 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
         </div>
 
         <div style={{ padding: 20, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <button onClick={handleInsert} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 15px rgba(79, 70, 229, 0.4)' }}>
+          <button onClick={handleInsert} disabled={is3D} style={{ background: is3D ? 'rgba(255,255,255,0.1)' : '#4f46e5', color: is3D ? 'rgba(255,255,255,0.4)' : '#fff', border: 'none', borderRadius: 12, padding: '14px', fontWeight: 700, cursor: is3D ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: is3D ? 'none' : '0 4px 15px rgba(79, 70, 229, 0.4)' }}>
             <Check size={20}/> Insertar en Pizarra
           </button>
         </div>
       </div>
 
-      {/* Main Graph Area */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: 'crosshair' }}>
-        <Stage 
-          width={window.innerWidth - 350} 
-          height={window.innerHeight}
-          draggable
-          onDragMove={(e) => setViewport({ ...viewport, x: e.target.x(), y: e.target.y() })}
-          onWheel={(e) => {
-            e.evt.preventDefault();
-            const scaleBy = 1.15;
-            const newScale = e.evt.deltaY < 0 ? viewport.scale * scaleBy : viewport.scale / scaleBy;
-            setViewport({ ...viewport, scale: Math.max(5, Math.min(newScale, 1000)) });
+      {/* Main Graph Area with Plotly */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0c' }}>
+        <Plot
+          data={plotData}
+          layout={{
+            width: window.innerWidth - 350,
+            height: window.innerHeight,
+            paper_bgcolor: '#0a0a0c',
+            plot_bgcolor: '#0a0a0c',
+            margin: { l: 0, r: 0, t: 0, b: 0 },
+            showlegend: false,
+            scene: is3D ? {
+              xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8' },
+              yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' },
+              zaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#10b981' },
+              camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
+            } : undefined,
+            xaxis: !is3D ? { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8', scaleanchor: 'y', scaleratio: 1 } : undefined,
+            yaxis: !is3D ? { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' } : undefined,
           }}
-          x={viewport.x}
-          y={viewport.y}
-        >
-          <Layer>
-            {gridLines}
-            {is3D && (
-              <Group>
-                {/* 3D Z Axis */}
-                <Line points={[0, 0, -500, -500]} stroke="#f43f5e" strokeWidth={2} dash={[10, 5]} />
-                <Text text="Z" x={-520} y={-520} fill="#f43f5e" fontSize={14} fontWeight="bold" />
-              </Group>
-            )}
-            {plotData.map(d => (
-              <Line 
-                key={d.id} 
-                points={d.points} 
-                stroke={d.color} 
-                strokeWidth={3} 
-                tension={d.points.length > 500 ? 0 : 0.5} 
-                lineCap="round" 
-                lineJoin="round"
-                opacity={0.9}
-              />
-            ))}
-          </Layer>
-        </Stage>
+          config={{ displayModeBar: true, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+        />
         
-        {/* Controls Overlay */}
-        <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 10 }}>
-          <button 
-            onClick={() => setIs3D(!is3D)}
-            style={{ 
-              background: is3D ? '#f43f5e' : 'rgba(25,25,35,0.8)', 
-              border: '1px solid rgba(255,255,255,0.1)', 
-              color: '#fff', padding: '8px 16px', borderRadius: 10, 
-              cursor: 'pointer', fontSize: 13, fontWeight: 700, backdropFilter: 'blur(10px)',
-              transition: 'all 0.2s'
-            }}
-          >
-            {is3D ? 'Modo 2D' : 'Modo 3D (Ejes)'}
-          </button>
-          <button 
-            onClick={() => setViewport({ x: (window.innerWidth - 350) / 2, y: window.innerHeight / 2, scale: 40 })}
-            style={{ background: 'rgba(25,25,35,0.8)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 500, backdropFilter: 'blur(10px)' }}
-          >
-            Centrar Vista
-          </button>
-        </div>
-
         {/* Help tooltip */}
-        <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', padding: '10px 20px', borderRadius: 30, color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 500, border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-          Zoom con rueda • Arrastra para mover el plano
+        <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', padding: '10px 20px', borderRadius: 30, color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 500, border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', pointerEvents: 'none' }}>
+          {is3D ? 'Arrastra para rotar • Scroll para zoom 3D' : 'Arrastra para mover • Scroll para zoom 2D'}
         </div>
       </div>
     </div>

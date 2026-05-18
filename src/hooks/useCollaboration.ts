@@ -69,6 +69,14 @@ export function useCollaboration() {
         setElements(arr);
       });
 
+      // Handle initial sync
+      provider.on('synced', ({ synced }: { synced: boolean }) => {
+        if (synced) {
+          const arr = yElements.toArray() as BoardElement[];
+          setElements(arr);
+        }
+      });
+
     } catch (e) {
       console.warn('WebRTC connection failed, running in local mode', e);
     }

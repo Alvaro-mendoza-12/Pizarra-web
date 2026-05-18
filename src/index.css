@@ -486,3 +486,27 @@ body {
   background: var(--border);
   margin: 4px 0;
 }
+
+/* ─── Mobile Responsiveness ─────────────────────────── */
+@media (max-width: 768px) {
+  .toolbar-container {
+    bottom: 20px;
+    left: 10px;
+    right: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+  }
+  
+  .toolbar-group {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .share-modal {
+    width: 95%;
+    padding: 20px;
+  }
+}

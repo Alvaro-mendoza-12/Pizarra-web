@@ -17,6 +17,7 @@ interface BoardStore {
   stageScale: number;
   roomId: string;
   userName: string;
+  isReadOnly: boolean;
   peers: { id: string; name: string; color: string; cursor?: { x: number; y: number } }[];
 
   // Actions
@@ -38,6 +39,7 @@ interface BoardStore {
   clearBoard: () => void;
   setRoomId: (id: string) => void;
   setUserName: (n: string) => void;
+  setIsReadOnly: (ro: boolean) => void;
   setPeers: (peers: any[]) => void;
 }
 
@@ -55,6 +57,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   stageScale: 1,
   roomId: '',
   userName: 'Tú',
+  isReadOnly: false,
   peers: [],
 
   setElements: (els) => set({ elements: els }),
@@ -112,5 +115,6 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   setRoomId: (id) => set({ roomId: id }),
   setUserName: (n) => set({ userName: n }),
+  setIsReadOnly: (ro) => set({ isReadOnly: ro }),
   setPeers: (peers) => set({ peers }),
 }));

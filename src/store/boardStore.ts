@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BoardElement, Tool } from '../types';
+import type { BoardElement, BoardPeer, Tool } from '../types';
 
 const MAX_HISTORY = 60;
 
@@ -19,7 +19,7 @@ interface BoardStore {
   userName: string;
   isReadOnly: boolean;
   theme: 'dark' | 'light';
-  peers: { id: string; name: string; color: string; cursor?: { x: number; y: number } }[];
+  peers: BoardPeer[];
 
   // Actions
   setElements: (els: BoardElement[]) => void;
@@ -42,7 +42,7 @@ interface BoardStore {
   setUserName: (n: string) => void;
   setIsReadOnly: (ro: boolean) => void;
   setTheme: (t: 'dark' | 'light') => void;
-  setPeers: (peers: any[]) => void;
+  setPeers: (peers: BoardPeer[]) => void;
 }
 
 export const useBoardStore = create<BoardStore>((set, get) => ({

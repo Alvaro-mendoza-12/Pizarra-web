@@ -1,16 +1,21 @@
 import React from 'react';
+import type Konva from 'konva';
 import { Image as KonvaImage } from 'react-konva';
 import useImage from 'use-image';
+import type { BoardElement } from '../types';
+
+type SelectEvent = Konva.KonvaEventObject<MouseEvent | TouchEvent>;
+type DragEventObject = Konva.KonvaEventObject<DragEvent>;
 
 interface URLImageProps {
   imageSrc: string;
-  shapeProps: any;
-  onSelect: (e: any, additive: boolean) => void;
-  onChange: (newAttrs: any) => void;
+  shapeProps: BoardElement;
+  onSelect: (e: SelectEvent, additive: boolean) => void;
+  onChange: (newAttrs: Partial<BoardElement>) => void;
   draggable?: boolean;
-  onNode?: (node: any) => void;
-  onDragStart?: (e: any) => void;
-  onDragMove?: (e: any) => void;
+  onNode?: (node: Konva.Node | null) => void;
+  onDragStart?: (e: DragEventObject) => void;
+  onDragMove?: (e: DragEventObject) => void;
 }
 
 export const URLImage = ({ imageSrc, shapeProps, onSelect, onChange, draggable = false, onNode, onDragStart, onDragMove }: URLImageProps) => {
@@ -20,18 +25,18 @@ export const URLImage = ({ imageSrc, shapeProps, onSelect, onChange, draggable =
     <React.Fragment>
       <KonvaImage
         image={img}
-        onClick={(e: any) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); }}
-        onTap={(e: any) => { e.cancelBubble = true; onSelect(e, false); }}
+        onClick={(e: Konva.KonvaEventObject<MouseEvent>) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); }}
+        onTap={(e: Konva.KonvaEventObject<TouchEvent>) => { e.cancelBubble = true; onSelect(e, false); }}
         ref={onNode}
         {...shapeProps}
         draggable={draggable}
-        onDragStart={(e: any) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); }}
-        onDragMove={(e: any) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); }}
-        onDragEnd={(e: any) => {
+        onDragStart={(e: DragEventObject) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); }}
+        onDragMove={(e: DragEventObject) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); }}
+        onDragEnd={(e: DragEventObject) => {
           e.cancelBubble = true;
           onChange({ ...shapeProps, x: e.target.x(), y: e.target.y() });
         }}
-        onTransformStart={(e: any) => { e.cancelBubble = true; }}
+        onTransformStart={(e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; }}
       />
     </React.Fragment>
   );

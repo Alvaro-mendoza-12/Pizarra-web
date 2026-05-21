@@ -1,15 +1,20 @@
 import React from 'react';
+import type Konva from 'konva';
 import { Rect, Circle, Line, Text, Arrow, Group, RegularPolygon } from 'react-konva';
 import type { BoardElement } from '../types';
 
+type SelectEvent = Konva.KonvaEventObject<MouseEvent | TouchEvent>;
+type DragEventObject = Konva.KonvaEventObject<DragEvent>;
+
 interface ShapeElementProps {
   shapeProps: BoardElement;
-  onSelect: (e: any, additive: boolean) => void;
-  onChange: (newAttrs: any) => void;
+  onSelect: (e: SelectEvent, additive: boolean) => void;
+  onChange: (newAttrs: Partial<BoardElement>) => void;
+  onEdit?: () => void;
   draggable?: boolean;
-  onNode?: (node: any) => void;
-  onDragStart?: (e: any) => void;
-  onDragMove?: (e: any) => void;
+  onNode?: (node: Konva.Node | null) => void;
+  onDragStart?: (e: DragEventObject) => void;
+  onDragMove?: (e: DragEventObject) => void;
 }
 
 const STICKY_COLORS: Record<string, { bg: string; text: string }> = {
@@ -23,18 +28,20 @@ const STICKY_COLORS: Record<string, { bg: string; text: string }> = {
 
 export const ShapeElement = ({
   shapeProps, onSelect, onChange,
-  draggable = false, onNode, onDragStart, onDragMove
+  draggable = false, onNode, onDragStart, onDragMove, onEdit
 }: ShapeElementProps) => {
 
-  const handleDragEnd = (e: any) => {
+  const handleDragEnd = (e: DragEventObject) => {
     e.cancelBubble = true;
     onChange({ ...shapeProps, x: e.target.x(), y: e.target.y() });
   };
 
   const commonProps = {
-    onClick: (e: any) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); },
-    onTap: (e: any) => { e.cancelBubble = true; onSelect(e, false); },
-    onMouseEnter: (e: any) => {
+    onClick: (e: Konva.KonvaEventObject<MouseEvent>) => { e.cancelBubble = true; onSelect(e, e.evt.shiftKey); },
+    onTap: (e: Konva.KonvaEventObject<TouchEvent>) => { e.cancelBubble = true; onSelect(e, false); },
+    onDblClick: (e: Konva.KonvaEventObject<MouseEvent>) => { e.cancelBubble = true; onEdit?.(); },
+    onDblTap: (e: Konva.KonvaEventObject<TouchEvent>) => { e.cancelBubble = true; onEdit?.(); },
+    onMouseEnter: (e: Konva.KonvaEventObject<MouseEvent>) => {
       if (e.evt.buttons === 1 && onSelect) {
         onSelect(e, false);
       }
@@ -42,10 +49,10 @@ export const ShapeElement = ({
     ref: onNode,
     ...shapeProps,
     draggable,
-    onDragStart: (e: any) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); },
-    onDragMove: (e: any) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); },
+    onDragStart: (e: DragEventObject) => { e.cancelBubble = true; if (onDragStart) onDragStart(e); },
+    onDragMove: (e: DragEventObject) => { e.cancelBubble = true; if (onDragMove) onDragMove(e); },
     onDragEnd: handleDragEnd,
-    onTransformStart: (e: any) => { e.cancelBubble = true; },
+    onTransformStart: (e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; },
   };
 
   // Highlighter mode
@@ -194,6 +201,56 @@ export const ShapeElement = ({
               fontStyle="500"
               wrap="word"
               ellipsis
+            />
+          </Group>
+        );
+      })()}
+
+      {/* Code block */}
+      {shapeProps.type === 'code' && (() => {
+        const w = shapeProps.width || 380;
+        const h = shapeProps.height || 220;
+        return (
+          <Group {...commonProps}>
+            <Rect
+              width={w}
+              height={h}
+              fill="#0f172a"
+              stroke="#334155"
+              strokeWidth={1}
+              cornerRadius={6}
+              shadowColor="rgba(0,0,0,0.45)"
+              shadowBlur={10}
+              shadowOffset={{ x: 1, y: 4 }}
+              shadowOpacity={0.45}
+            />
+            <Rect width={w} height={30} fill="#111827" cornerRadius={[6, 6, 0, 0]} />
+            <Circle x={16} y={15} radius={4} fill="#fb7185" />
+            <Circle x={30} y={15} radius={4} fill="#fbbf24" />
+            <Circle x={44} y={15} radius={4} fill="#34d399" />
+            <Text
+              text={shapeProps.language || 'codigo'}
+              x={w - 94}
+              y={9}
+              width={82}
+              align="right"
+              fill="#94a3b8"
+              fontSize={11}
+              fontFamily="Fira Code, monospace"
+            />
+            <Text
+              text={shapeProps.text || '// Escribe un ejemplo'}
+              x={16}
+              y={44}
+              width={w - 32}
+              height={h - 58}
+              fill="#e2e8f0"
+              fontSize={shapeProps.fontSize || 16}
+              fontFamily="Fira Code, Consolas, monospace"
+              lineHeight={1.35}
+              wrap="word"
+              ellipsis
+              perfectDrawEnabled={false}
             />
           </Group>
         );

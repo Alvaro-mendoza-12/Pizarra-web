@@ -1,38 +1,134 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import * as math from 'mathjs';
+import { parse } from 'mathjs/number';
 import { Plus, Trash2, Check, ArrowLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import type { BoardElement } from '../types';
 
-const Plot = ({ data, layout, config, style }: any) => {
+interface LinePlotTrace {
+  x: number[];
+  y: number[];
+  type: 'scatter';
+  mode: 'lines';
+  line: { color: string; width: number };
+  name: string;
+}
+
+interface SurfacePlotTrace {
+  x: number[];
+  y: number[];
+  z: number[][];
+  type: 'surface';
+  colorscale: [[number, string], [number, string]];
+  opacity: number;
+  showscale: false;
+  name: string;
+}
+
+type PlotTrace = LinePlotTrace | SurfacePlotTrace;
+type PlotLayout = Record<string, unknown>;
+type PlotConfig = Record<string, unknown>;
+
+interface RenderedAxis {
+  range?: [number, number];
+}
+
+interface RenderedLayout {
+  xaxis?: RenderedAxis;
+  yaxis?: RenderedAxis;
+}
+
+type PlotContainer = HTMLDivElement & { layout?: RenderedLayout };
+
+interface PlotlyApi {
+  newPlot: (target: HTMLElement, data: PlotTrace[], layout: PlotLayout, config: PlotConfig) => void;
+  purge: (target: HTMLElement) => void;
+  relayout: (target: HTMLElement, update: Record<string, unknown>) => void;
+  toImage: (target: HTMLElement, options: { format: 'png'; width: number; height: number }) => Promise<string>;
+  Plots: { resize: (target: HTMLElement) => void };
+}
+
+type PlotlyLoadState = 'loading' | 'ready' | 'error';
+
+interface PlotProps {
+  data: PlotTrace[];
+  layout: PlotLayout;
+  config: PlotConfig;
+  style?: React.CSSProperties;
+  plotly: PlotlyApi;
+}
+
+const PLOTLY_SRC = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
+let plotlyPromise: Promise<PlotlyApi> | null = null;
+
+function getPlotly() {
+  return (window as Window & { Plotly?: PlotlyApi }).Plotly;
+}
+
+function getPlotContainer() {
+  return document.querySelector<HTMLDivElement>('[data-plot-root]') as PlotContainer | null;
+}
+
+function loadPlotly() {
+  const readyPlotly = getPlotly();
+  if (readyPlotly) return Promise.resolve(readyPlotly);
+  if (plotlyPromise) return plotlyPromise;
+
+  plotlyPromise = new Promise<PlotlyApi>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${PLOTLY_SRC}"]`);
+    const script = existingScript ?? document.createElement('script');
+
+    const finish = () => {
+      const plotly = getPlotly();
+      if (plotly) {
+        resolve(plotly);
+      } else {
+        plotlyPromise = null;
+        reject(new Error('Plotly no quedó disponible al terminar de cargar.'));
+      }
+    };
+
+    const fail = () => {
+      plotlyPromise = null;
+      script.remove();
+      reject(new Error('No se pudo cargar Plotly.'));
+    };
+
+    script.addEventListener('load', finish, { once: true });
+    script.addEventListener('error', fail, { once: true });
+
+    if (!existingScript) {
+      script.src = PLOTLY_SRC;
+      script.async = true;
+      script.dataset.plotly = 'lazy';
+      document.head.appendChild(script);
+    }
+  });
+
+  return plotlyPromise;
+}
+
+const Plot = ({ data, layout, config, style, plotly }: PlotProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const Plotly = (window as any).Plotly;
-    if (!Plotly) {
-      console.warn("Plotly is not loaded yet.");
-      return;
-    }
+    const container = containerRef.current;
+    if (!container) return;
 
-    Plotly.newPlot(containerRef.current, data, layout, config);
+    plotly.newPlot(container, data, layout, config);
 
     const handleResize = () => {
-      if (containerRef.current && Plotly) {
-        Plotly.Plots.resize(containerRef.current);
-      }
+      plotly.Plots.resize(container);
     };
 
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (containerRef.current && Plotly) {
-        Plotly.purge(containerRef.current);
-      }
+      plotly.purge(container);
     };
-  }, [data, layout, config]);
+  }, [data, layout, config, plotly]);
 
-  return <div ref={containerRef} style={style} />;
+  return <div ref={containerRef} data-plot-root style={style} />;
 };
 
 interface FunctionItem {
@@ -45,27 +141,54 @@ interface FunctionItem {
 
 interface GraphFullscreenProps {
   onClose: () => void;
-  onInsert: (elements: any[]) => void;
+  onInsert: (elements: BoardElement[]) => void;
   initialFormula: string | null;
   initialIs3D: boolean;
 }
 
 const COLORS = ['#818cf8', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
 
+function createInitialFunctions(initialFormula: string | null, initialIs3D: boolean): FunctionItem[] {
+  if (initialFormula) {
+    return [{
+      id: uuidv4(),
+      expression: initialFormula,
+      color: '#818cf8',
+      visible: true,
+      type: initialIs3D ? '3d' : '2d',
+    }];
+  }
+
+  return [{ id: '1', expression: 'x^2', color: '#818cf8', visible: true, type: '2d' }];
+}
+
 export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onInsert, initialFormula, initialIs3D }) => {
-  const [functions, setFunctions] = useState<FunctionItem[]>([
-    { id: '1', expression: 'x^2', color: '#818cf8', visible: true, type: '2d' }
-  ]);
-  const [is3D, setIs3D] = useState(false);
+  const [functions, setFunctions] = useState<FunctionItem[]>(() => createInitialFunctions(initialFormula, initialIs3D));
+  const [is3D, setIs3D] = useState(() => initialFormula ? initialIs3D : false);
+  const [isInserting, setIsInserting] = useState(false);
+  const [plotlyState, setPlotlyState] = useState<PlotlyLoadState>(() => getPlotly() ? 'ready' : 'loading');
+  const [plotlyRetry, setPlotlyRetry] = useState(0);
+  const [plotly, setPlotly] = useState<PlotlyApi | null>(() => getPlotly() ?? null);
 
   useEffect(() => {
-    if (initialFormula) {
-      setFunctions([
-        { id: uuidv4(), expression: initialFormula, color: '#818cf8', visible: true, type: initialIs3D ? '3d' : '2d' }
-      ]);
-      setIs3D(initialIs3D);
-    }
-  }, [initialFormula, initialIs3D]);
+    let mounted = true;
+
+    loadPlotly()
+      .then(api => {
+        if (!mounted) return;
+        setPlotly(api);
+        setPlotlyState('ready');
+      })
+      .catch(error => {
+        if (!mounted) return;
+        console.warn('Plotly load error:', error);
+        setPlotlyState('error');
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [plotlyRetry]);
 
   const addFunction = () => {
     setFunctions([...functions, { id: uuidv4(), expression: '', color: COLORS[functions.length % COLORS.length], visible: true, type: is3D ? '3d' : '2d' }]);
@@ -83,8 +206,8 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
     setFunctions(functions.map(f => f.id === id ? { ...f, visible: !f.visible } : f));
   };
 
-  const plotData = useMemo(() => {
-    const data: any[] = [];
+  const plotData = useMemo<PlotTrace[]>(() => {
+    const data: PlotTrace[] = [];
     
     functions.filter(f => f.visible && f.expression).forEach(f => {
       try {
@@ -95,13 +218,13 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
           if (exprRaw.startsWith('r=')) {
             // Polar
             const expr = exprRaw.slice(2);
-            const node = math.parse(expr);
+            const node = parse(expr);
             const compiled = node.compile();
             const theta: number[] = [];
             const r: number[] = [];
             for (let t = 0; t <= Math.PI * 4; t += 0.05) {
               theta.push(t);
-              r.push(compiled.evaluate({ theta: t, t: t }));
+              r.push(Number(compiled.evaluate({ theta: t, t: t })));
             }
             // Convert to cartesian for plotting
             const x = r.map((rad, i) => rad * Math.cos(theta[i]));
@@ -112,13 +235,13 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
             if (exprRaw.includes('y=')) exprRaw = exprRaw.split('y=')[1];
             else if (exprRaw.includes('f(x)=')) exprRaw = exprRaw.split('f(x)=')[1];
             
-            const node = math.parse(exprRaw);
+            const node = parse(exprRaw);
             const compiled = node.compile();
-            const x = [];
-            const y = [];
+            const x: number[] = [];
+            const y: number[] = [];
             for (let i = -20; i <= 20; i += 0.2) {
               x.push(i);
-              y.push(compiled.evaluate({ x: i }));
+              y.push(Number(compiled.evaluate({ x: i })));
             }
             data.push({ x, y, type: 'scatter', mode: 'lines', line: { color: f.color, width: 3 }, name: f.expression });
           }
@@ -129,12 +252,12 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
           if (exprRaw.includes('z=')) exprRaw = exprRaw.split('z=')[1];
           else if (exprRaw.includes('f(x,y)=')) exprRaw = exprRaw.split('f(x,y)=')[1];
 
-          const node = math.parse(exprRaw);
+          const node = parse(exprRaw);
           const compiled = node.compile();
 
-          const x = [];
-          const y = [];
-          const z = [];
+          const x: number[] = [];
+          const y: number[] = [];
+          const z: number[][] = [];
           const steps = 40;
           const range = 10;
           for (let i = -range; i <= range; i += (range * 2) / steps) {
@@ -143,10 +266,10 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
           }
           
           for (let i = 0; i < y.length; i++) {
-            const zRow = [];
+            const zRow: number[] = [];
             for (let j = 0; j < x.length; j++) {
               try {
-                const val = compiled.evaluate({ x: x[j], y: y[i] });
+                const val = Number(compiled.evaluate({ x: x[j], y: y[i] }));
                 // Limit very large values to prevent plot distortion
                 zRow.push(Math.max(-50, Math.min(50, val)));
               } catch {
@@ -174,11 +297,11 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
   }, [functions, is3D]);
 
   const handleZoom2D = (factor: number) => {
-    const Plotly = (window as any).Plotly;
-    const div = document.querySelector('.graph-main > div');
+    const Plotly = getPlotly();
+    const div = getPlotContainer();
     if (!div || !Plotly) return;
     
-    const layout = (div as any).layout;
+    const layout = div.layout;
     if (!layout || !layout.xaxis || !layout.yaxis) return;
     
     const xRange = layout.xaxis.range;
@@ -196,14 +319,38 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
     });
   };
 
-  const handleInsert = () => {
-    // Basic mapping of 2D data to strokes for the whiteboard
+  const handleInsert = async () => {
+    if (isInserting || plotData.length === 0) return;
+
+    // Plotly can export the rendered 3D scene as a PNG snapshot for the board.
     if (is3D) {
-      alert("La inserción de gráficos 3D en la pizarra 2D aún no está soportada. Por favor toma una captura de pantalla.");
+      const Plotly = getPlotly();
+      const div = getPlotContainer();
+      if (!Plotly || !div) return;
+
+      setIsInserting(true);
+      try {
+        const width = Math.min(920, Math.max(560, Math.round(window.innerWidth * 0.64)));
+        const height = Math.round(width * 0.68);
+        const src = await Plotly.toImage(div, { format: 'png', width, height });
+        onInsert([{
+          id: uuidv4(),
+          type: 'image',
+          src,
+          x: window.innerWidth / 2 - width / 2,
+          y: window.innerHeight / 2 - height / 2,
+          width,
+          height,
+        }]);
+      } finally {
+        setIsInserting(false);
+      }
       return;
     }
 
-    const elementsToInsert = plotData.filter(d => d.x && d.x.length > 0).map(d => {
+    const elementsToInsert = plotData
+      .filter((trace): trace is LinePlotTrace => trace.type === 'scatter' && trace.x.length > 0)
+      .map((d): BoardElement | null => {
       let minX = Infinity, minY = Infinity;
       const points = [];
       const scale = 20; // scale factor
@@ -231,9 +378,10 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
         stroke: d.line?.color || '#fff',
         strokeWidth: 3
       };
-    }).filter(e => e !== null);
+      })
+      .filter(e => e !== null);
     
-    onInsert(elementsToInsert as any[]);
+    onInsert(elementsToInsert.filter((element): element is BoardElement => element !== null));
   };
 
   return (
@@ -308,38 +456,50 @@ export const GraphFullscreen: React.FC<GraphFullscreenProps> = ({ onClose, onIns
         </div>
 
         <div style={{ padding: 20, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <button onClick={handleInsert} disabled={is3D} style={{ background: is3D ? 'rgba(255,255,255,0.1)' : '#4f46e5', color: is3D ? 'rgba(255,255,255,0.4)' : '#fff', border: 'none', borderRadius: 12, padding: '14px', fontWeight: 700, cursor: is3D ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: is3D ? 'none' : '0 4px 15px rgba(79, 70, 229, 0.4)' }}>
-            <Check size={20}/> Insertar en Pizarra
+          <button onClick={handleInsert} disabled={isInserting || plotData.length === 0} style={{ background: isInserting || plotData.length === 0 ? 'rgba(255,255,255,0.1)' : '#4f46e5', color: isInserting || plotData.length === 0 ? 'rgba(255,255,255,0.4)' : '#fff', border: 'none', borderRadius: 12, padding: '14px', fontWeight: 700, cursor: isInserting || plotData.length === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isInserting || plotData.length === 0 ? 'none' : '0 4px 15px rgba(79, 70, 229, 0.4)' }}>
+            <Check size={20}/> {isInserting ? 'Insertando...' : is3D ? 'Insertar captura 3D' : 'Insertar en Pizarra'}
           </button>
         </div>
       </div>
 
       {/* Main Graph Area with Plotly */}
       <div className="graph-main">
-        <Plot
-          data={plotData}
-          useResizeHandler={true}
-          layout={{
-            autosize: true,
-            paper_bgcolor: '#0a0a0c',
-            plot_bgcolor: '#0a0a0c',
-            margin: { l: 0, r: 0, t: 0, b: 0 },
-            showlegend: false,
-            ...(is3D ? {
-              scene: {
-                xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8' },
-                yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' },
-                zaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#10b981' },
-                camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
-              }
-            } : {
-              xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8', scaleanchor: 'y', scaleratio: 1 },
-              yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' }
-            })
-          }}
-          config={{ displayModeBar: true, responsive: true }}
-          style={{ width: '100%', height: '100%' }}
-        />
+        {plotly && plotlyState === 'ready' ? (
+          <Plot
+            data={plotData}
+            plotly={plotly}
+            layout={{
+              autosize: true,
+              paper_bgcolor: '#0a0a0c',
+              plot_bgcolor: '#0a0a0c',
+              margin: { l: 0, r: 0, t: 0, b: 0 },
+              showlegend: false,
+              ...(is3D ? {
+                scene: {
+                  xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8' },
+                  yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' },
+                  zaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#10b981' },
+                  camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
+                }
+              } : {
+                xaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#818cf8', scaleanchor: 'y', scaleratio: 1 },
+                yaxis: { color: '#fff', gridcolor: '#333', zerolinecolor: '#f43f5e' }
+              })
+            }}
+            config={{ displayModeBar: true, responsive: true }}
+            style={{ width: '100%', height: '100%' }}
+          />
+        ) : plotlyState === 'error' ? (
+          <div className="graph-loader">
+            <span>No se pudo cargar el graficador.</span>
+            <button onClick={() => {
+              setPlotlyState('loading');
+              setPlotlyRetry(value => value + 1);
+            }}>Reintentar</button>
+          </div>
+        ) : (
+          <div className="graph-loader">Cargando motor gráfico...</div>
+        )}
         
         {/* Floating Zoom Controls for 2D */}
         {!is3D && (

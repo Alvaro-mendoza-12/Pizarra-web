@@ -1,16 +1,41 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect, useCallback } from 'react';
+import type Konva from 'konva';
 import { Stage, Layer, Rect as KonvaRect, Line, Transformer } from 'react-konva';
 import { v4 as uuidv4 } from 'uuid';
 import type { BoardElement, Tool } from '../types';
 import { ShapeElement } from './ShapeElement';
 import { URLImage } from './URLImage';
 import { Toolbar } from './Toolbar';
-import { GraphFullscreen } from './GraphFullscreen';
 import { ShareModal } from './ShareModal';
 import { useBoardStore } from '../store/boardStore';
 import { useCollaboration } from '../hooks/useCollaboration';
 
 const GRID_SIZE = 40;
+const MAX_IMAGE_SIDE = 960;
+const GraphFullscreen = lazy(() => import('./GraphFullscreen').then(module => ({
+  default: module.GraphFullscreen,
+})));
+
+type EditorKind = 'text' | 'sticky' | 'code';
+
+interface TextEditorState {
+  id?: string;
+  sx: number;
+  sy: number;
+  cx: number;
+  cy: number;
+  kind: EditorKind;
+  width?: number;
+  height?: number;
+  fontSize?: number;
+  fontFamily?: string;
+  fill?: string;
+  stickyColor?: string;
+}
+
+function isEditableContent(element: BoardElement): element is BoardElement & { type: EditorKind } {
+  return element.type === 'text' || element.type === 'sticky' || element.type === 'code';
+}
 
 function GridLines({ scale, pos }: { scale: number; pos: { x: number; y: number } }) {
   const theme = useBoardStore(state => state.theme);
@@ -35,16 +60,16 @@ export default function Whiteboard() {
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
   const isMarqueeActive = useRef(false);
-  const [textEditor, setTextEditor] = useState<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
+  const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
   const [textValue, setTextValue] = useState('');
   const [showGraph, setShowGraph] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [initialFormula, setInitialFormula] = useState<string | null>(null);
   const [initialIs3D, setInitialIs3D] = useState<boolean>(false);
-  const stageRef = useRef<any>(null);
-  const trRef = useRef<any>(null);
-  const nodeRefs = useRef<{ [id: string]: any }>({});
+  const stageRef = useRef<Konva.Stage>(null);
+  const trRef = useRef<Konva.Transformer>(null);
+  const nodeRefs = useRef<Record<string, Konva.Node>>({});
   const dragStartPos = useRef<{ [id: string]: { x: number; y: number } }>({});
   const elementsRef = useRef(store.elements);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -53,7 +78,11 @@ export default function Whiteboard() {
 
   useEffect(() => {
     if (store.selectedIds.length > 0 && trRef.current) {
-      trRef.current.nodes(store.selectedIds.map(id => nodeRefs.current[id]).filter(Boolean));
+      trRef.current.nodes(
+        store.selectedIds
+          .map(id => nodeRefs.current[id])
+          .filter((node): node is Konva.Node => Boolean(node))
+      );
       trRef.current.getLayer()?.batchDraw();
     } else if (trRef.current) {
       trRef.current.nodes([]);
@@ -62,15 +91,26 @@ export default function Whiteboard() {
   }, [store.selectedIds, store.elements]);
 
   useEffect(() => {
-    if (textEditor) setTimeout(() => textareaRef.current?.focus(), 50);
+    if (textEditor) {
+      window.setTimeout(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      }, 50);
+    }
   }, [textEditor]);
 
   // Check URL for room
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get('room');
+    const board = useBoardStore.getState();
+    const isViewOnly = params.get('mode') === 'view';
+    board.setIsReadOnly(isViewOnly);
+    if (isViewOnly) board.setTool('pan');
     if (room) {
-      store.setRoomId(room);
+      board.setRoomId(room);
       setTimeout(() => setShowShare(true), 500);
     }
   }, []);
@@ -102,6 +142,83 @@ export default function Whiteboard() {
     if (!p) return { x: 0, y: 0 };
     return { x: (p.x - s.x()) / s.scaleX(), y: (p.y - s.y()) / s.scaleY() };
   }, []);
+
+  const commitElements = useCallback((els: BoardElement[]) => {
+    useBoardStore.getState().pushHistory(els);
+    syncElements(els);
+  }, [syncElements]);
+
+  const openTextEditor = useCallback((kind: EditorKind, cx: number, cy: number, element?: BoardElement) => {
+    const stage = stageRef.current;
+    if (!stage || useBoardStore.getState().isReadOnly) return;
+
+    const box = stage.container().getBoundingClientRect();
+    setTextValue(element?.text || '');
+    setTextEditor({
+      id: element?.id,
+      sx: cx * stage.scaleX() + stage.x() + box.left,
+      sy: cy * stage.scaleY() + stage.y() + box.top,
+      cx,
+      cy,
+      kind,
+      width: element?.width,
+      height: element?.height,
+      fontSize: element?.fontSize,
+      fontFamily: element?.fontFamily,
+      fill: element?.fill,
+      stickyColor: element?.stickyColor,
+    });
+  }, []);
+
+  const openElementEditor = useCallback((element: BoardElement) => {
+    if (!isEditableContent(element)) return false;
+    const board = useBoardStore.getState();
+    if (board.isReadOnly) return false;
+
+    board.setTool('select');
+    board.setSelectedIds([element.id]);
+    openTextEditor(element.type, element.x || 0, element.y || 0, element);
+    return true;
+  }, [openTextEditor]);
+
+  const editSelectedContent = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.selectedIds.length !== 1) return false;
+    const element = board.elements.find(item => item.id === board.selectedIds[0]);
+    return element ? openElementEditor(element) : false;
+  }, [openElementEditor]);
+
+  const syncCurrentElements = useCallback(() => {
+    syncElements(useBoardStore.getState().elements);
+  }, [syncElements]);
+
+  const undoBoard = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly) return;
+    board.undo();
+    syncCurrentElements();
+  }, [syncCurrentElements]);
+
+  const redoBoard = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly) return;
+    board.redo();
+    syncCurrentElements();
+  }, [syncCurrentElements]);
+
+  const deleteSelectedBoard = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly || board.selectedIds.length === 0) return;
+    board.deleteSelected();
+    syncCurrentElements();
+  }, [syncCurrentElements]);
+
+  const clearBoard = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly) return;
+    board.clearBoard();
+    syncCurrentElements();
+  }, [syncCurrentElements]);
 
   const handleMouseMove = useCallback(() => {
     const pos = getPos();
@@ -137,7 +254,7 @@ export default function Whiteboard() {
     store.setElements(els);
   }, [store, isDrawing, getPos, isConnected, updateCursor]);
 
-  const handleMouseDown = useCallback((e: any) => {
+  const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const { tool, color, strokeWidth, elements, isReadOnly } = store;
     if (tool === 'pan' || isReadOnly) return;
     const isStage = e.target === stageRef.current;
@@ -152,14 +269,9 @@ export default function Whiteboard() {
       return;
     }
 
-    if (tool === 'text' || tool === 'sticky') {
-      const s = stageRef.current;
-      if (!s) return;
+    if (tool === 'text' || tool === 'sticky' || tool === 'code') {
       const cp = getPos();
-      const box = s.container().getBoundingClientRect();
-      const pp = s.getPointerPosition();
-      setTextValue('');
-      setTextEditor({ sx: pp.x + box.left, sy: pp.y + box.top, cx: cp.x, cy: cp.y });
+      openTextEditor(tool, cp.x, cp.y);
       return;
     }
 
@@ -179,7 +291,7 @@ export default function Whiteboard() {
       newEl.x = 0; newEl.y = 0;
     }
     store.setElements([...elements, newEl]);
-  }, [store, getPos]);
+  }, [store, getPos, openTextEditor]);
 
   const handleMouseUp = useCallback(() => {
     const { tool, elements } = store;
@@ -211,32 +323,71 @@ export default function Whiteboard() {
       return;
     }
     if (isDrawing) {
-      store.pushHistory(store.elements);
-      if (isConnected) syncElements(store.elements);
+      commitElements(store.elements);
     }
     setIsDrawing(false);
-  }, [store, marquee, isDrawing, isConnected, syncElements]);
+  }, [store, marquee, isDrawing, commitElements]);
 
   const commitText = useCallback(() => {
     if (!textEditor) return;
-    const { tool, color, fontSize, elements } = store;
-    if (textValue.trim()) {
-      const isSt = tool === 'sticky';
-      const newArr = [...elements, {
-        id: uuidv4(), type: isSt ? 'sticky' as Tool : 'text' as Tool,
-        x: textEditor.cx, y: textEditor.cy,
-        text: textValue, fill: isSt ? undefined : color,
-        fontSize, fontFamily: 'Inter, sans-serif', strokeWidth: 0,
-        width: isSt ? 200 : undefined, height: isSt ? 200 : undefined,
-        stickyColor: isSt ? 'yellow' : undefined,
-      }];
-      store.pushHistory(newArr);
-      if (isConnected) syncElements(newArr);
+    const board = useBoardStore.getState();
+    const { color } = board;
+    const fontSize = textEditor.fontSize || board.fontSize;
+    const text = textValue.trimEnd();
+    if (text.trim()) {
+      const isSt = textEditor.kind === 'sticky';
+      const isCode = textEditor.kind === 'code';
+      const textarea = textareaRef.current;
+      const scale = Math.max(0.05, board.stageScale);
+      const editorWidth = textarea ? Math.round(textarea.offsetWidth / scale) : undefined;
+      const editorHeight = textarea ? Math.round(textarea.offsetHeight / scale) : undefined;
+      const contentWidth = isSt
+        ? Math.max(180, editorWidth || textEditor.width || 200)
+        : isCode
+          ? Math.max(320, editorWidth || textEditor.width || 420)
+          : textEditor.width;
+      const codeHeight = Math.min(620, Math.max(
+        180,
+        editorHeight || textEditor.height || text.split('\n').length * (fontSize + 5) + 78
+      ));
+      const contentHeight = isSt
+        ? Math.max(160, editorHeight || textEditor.height || 200)
+        : isCode
+          ? codeHeight
+          : textEditor.height;
+
+      if (textEditor.id) {
+        const updated = board.elements.map(element => element.id === textEditor.id ? {
+          ...element,
+          text,
+          fontSize,
+          width: contentWidth,
+          height: contentHeight,
+        } : element);
+        commitElements(updated);
+      } else {
+        const newArr: BoardElement[] = [...board.elements, {
+          id: uuidv4(),
+          type: isSt ? 'sticky' as Tool : isCode ? 'code' as Tool : 'text' as Tool,
+          x: textEditor.cx,
+          y: textEditor.cy,
+          text,
+          fill: isSt || isCode ? undefined : color,
+          fontSize,
+          fontFamily: isCode ? 'Fira Code, Consolas, monospace' : 'Inter, sans-serif',
+          strokeWidth: 0,
+          width: contentWidth,
+          height: contentHeight,
+          stickyColor: isSt ? 'yellow' : undefined,
+          language: isCode ? 'codigo' : undefined,
+        }];
+        commitElements(newArr);
+      }
     }
     setTextEditor(null); setTextValue('');
-  }, [textEditor, textValue, store, isConnected, syncElements]);
+  }, [textEditor, textValue, commitElements]);
 
-  const handleChange = useCallback((id: string, attrs: any) => {
+  const handleChange = useCallback((id: string, attrs: Partial<BoardElement>) => {
     const { selectedIds } = store;
     let updated: BoardElement[];
     if (selectedIds.length > 1 && selectedIds.includes(id)) {
@@ -250,9 +401,34 @@ export default function Whiteboard() {
     } else {
       updated = elementsRef.current.map(e => e.id === id ? { ...e, ...attrs } : e);
     }
-    store.pushHistory(updated);
-    if (isConnected) syncElements(updated);
-  }, [store, isConnected, syncElements]);
+    commitElements(updated);
+  }, [store, commitElements]);
+
+  const duplicateSelectedBoard = useCallback(() => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly || board.selectedIds.length === 0) return;
+
+    const offset = 28 / Math.max(0.25, board.stageScale);
+    const selected = board.elements.filter(element => board.selectedIds.includes(element.id));
+    const clones = selected.map(element => ({
+      ...element,
+      id: uuidv4(),
+      x: (element.x || 0) + offset,
+      y: (element.y || 0) + offset,
+    }));
+
+    commitElements([...board.elements, ...clones]);
+    useBoardStore.getState().setSelectedIds(clones.map(element => element.id));
+  }, [commitElements]);
+
+  const moveSelectedLayer = useCallback((direction: 'front' | 'back') => {
+    const board = useBoardStore.getState();
+    if (board.isReadOnly || board.selectedIds.length === 0) return;
+
+    const selected = board.elements.filter(element => board.selectedIds.includes(element.id));
+    const rest = board.elements.filter(element => !board.selectedIds.includes(element.id));
+    commitElements(direction === 'front' ? [...rest, ...selected] : [...selected, ...rest]);
+  }, [commitElements]);
 
   const zoom = useCallback((factor: number) => {
     const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -265,11 +441,13 @@ export default function Whiteboard() {
     });
   }, [store]);
 
-  const handleWheel = useCallback((e: any) => {
+  const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const s = stageRef.current;
+    if (!s) return;
     const old = s.scaleX();
     const ptr = s.getPointerPosition();
+    if (!ptr) return;
     const mpt = { x: (ptr.x - s.x()) / old, y: (ptr.y - s.y()) / old };
     const ns = Math.max(0.05, Math.min(10, e.evt.deltaY > 0 ? old / 1.06 : old * 1.06));
     store.setStageScale(ns);
@@ -277,19 +455,23 @@ export default function Whiteboard() {
   }, [store]);
 
   const addImage = useCallback((src: string) => {
+    if (useBoardStore.getState().isReadOnly) return;
     const img = new window.Image();
     img.src = src;
     img.onload = () => {
-      const newArr = [...store.elements, {
+      const board = useBoardStore.getState();
+      const fitScale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * fitScale));
+      const height = Math.max(1, Math.round(img.height * fitScale));
+      const newArr = [...board.elements, {
         id: uuidv4(), type: 'image' as Tool, src,
-        x: -store.stagePos.x / store.stageScale + window.innerWidth / 2 / store.stageScale - img.width / 2,
-        y: -store.stagePos.y / store.stageScale + window.innerHeight / 2 / store.stageScale - img.height / 2,
-        width: img.width, height: img.height,
+        x: -board.stagePos.x / board.stageScale + window.innerWidth / 2 / board.stageScale - width / 2,
+        y: -board.stagePos.y / board.stageScale + window.innerHeight / 2 / board.stageScale - height / 2,
+        width, height,
       }];
-      store.pushHistory(newArr);
-      if (isConnected) syncElements(newArr);
+      commitElements(newArr);
     };
-  }, [store, isConnected, syncElements]);
+  }, [commitElements]);
 
   const saveBoard = useCallback(() => {
     const data = JSON.stringify({ elements: store.elements, version: 1 });
@@ -300,44 +482,77 @@ export default function Whiteboard() {
   }, [store.elements]);
 
   const loadBoard = useCallback(() => {
+    if (useBoardStore.getState().isReadOnly) return;
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json';
-    input.onchange = (e: any) => {
-      const f = e.target.files?.[0];
+    input.onchange = () => {
+      const f = input.files?.[0];
       if (!f) return;
       const fr = new FileReader();
       fr.onload = ev => {
         try {
           const data = JSON.parse(ev.target?.result as string);
-          if (data.elements) { store.pushHistory(data.elements); if (isConnected) syncElements(data.elements); }
+          if (Array.isArray(data.elements)) commitElements(data.elements);
         } catch { alert('Archivo inválido'); }
       };
       fr.readAsText(f);
     };
     input.click();
-  }, [store, isConnected, syncElements]);
+  }, [commitElements]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') return;
-      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); store.deleteSelected(); }
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); store.undo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); store.redo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveBoard(); }
-      if (store.isReadOnly) return;
-      const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', e: e.shiftKey ? 'eraser-stroke' : 'eraser', r: 'rect', c: 'circle', l: 'line', t: 'text', n: 'sticky' };
+      const board = useBoardStore.getState();
       const k = e.key.toLowerCase();
-      if (map[k] && !e.ctrlKey) store.setTool(map[k]);
-      if (k === 'g' && !e.ctrlKey) store.setShowGrid(!store.showGrid);
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (!board.isReadOnly) { e.preventDefault(); deleteSelectedBoard(); }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'z') {
+        if (!board.isReadOnly) { e.preventDefault(); undoBoard(); }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (k === 'y' || (e.shiftKey && k === 'z'))) {
+        if (!board.isReadOnly) { e.preventDefault(); redoBoard(); }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveBoard(); }
+      if (!board.isReadOnly && (e.key === 'Enter' || e.key === 'F2') && editSelectedContent()) {
+        e.preventDefault();
+        return;
+      }
+      if (!board.isReadOnly && (e.ctrlKey || e.metaKey) && k === 'd') {
+        e.preventDefault();
+        duplicateSelectedBoard();
+        return;
+      }
+      if (k === 'g' && !e.ctrlKey) board.setShowGrid(!board.showGrid);
       if (e.key === '+' || e.key === '=') zoom(1.15);
       if (e.key === '-') zoom(0.85);
-      if (e.key === ' ') { e.preventDefault(); store.setTool('pan'); }
+      if (e.key === ' ') { e.preventDefault(); board.setTool('pan'); }
+      if (board.isReadOnly) return;
+      const map: Record<string, Tool> = {
+        v: 'select',
+        p: 'pen',
+        h: 'highlighter',
+        e: e.shiftKey ? 'eraser-stroke' : 'eraser',
+        r: 'rect',
+        c: 'circle',
+        l: 'line',
+        t: 'text',
+        n: 'sticky',
+        k: 'code',
+      };
+      if (map[k] && !e.ctrlKey) board.setTool(map[k]);
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === ' ') store.setTool('select'); };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ' && !useBoardStore.getState().isReadOnly) useBoardStore.getState().setTool('select');
+    };
     const onPaste = (e: ClipboardEvent) => {
-      if (!e.clipboardData) return;
+      if (!e.clipboardData || useBoardStore.getState().isReadOnly) return;
       for (const item of Array.from(e.clipboardData.items)) {
         if (item.type.startsWith('image/')) {
           const blob = item.getAsFile();
@@ -349,7 +564,7 @@ export default function Whiteboard() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('paste', onPaste);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('paste', onPaste); };
-  }, [store, zoom, addImage, saveBoard]);
+  }, [zoom, addImage, saveBoard, deleteSelectedBoard, redoBoard, undoBoard, editSelectedContent, duplicateSelectedBoard]);
 
   const handleNodeDragStart = useCallback((id: string) => {
     if (!store.selectedIds.includes(id)) return;
@@ -359,7 +574,7 @@ export default function Whiteboard() {
     });
   }, [store.selectedIds]);
 
-  const handleNodeDragMove = useCallback((id: string, e: any) => {
+  const handleNodeDragMove = useCallback((id: string, e: Konva.KonvaEventObject<DragEvent>) => {
     if (store.selectedIds.length <= 1 || !store.selectedIds.includes(id)) return;
     const sp = dragStartPos.current[id];
     if (!sp) return;
@@ -374,28 +589,44 @@ export default function Whiteboard() {
   }, [store.selectedIds]);
 
   const cursor = store.tool === 'pan' ? 'grab' : store.tool === 'select' ? 'default' : store.tool === 'eraser' ? 'cell' : 'crosshair';
+  const canEditSelected = store.selectedIds.length === 1
+    && store.elements.some(element => element.id === store.selectedIds[0] && isEditableContent(element));
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)', position: 'relative', touchAction: 'none' }}>
       <Toolbar
         canUndo={store.canUndo()} canRedo={store.canRedo()}
-        onUndo={store.undo} onRedo={store.redo}
+        onUndo={undoBoard} onRedo={redoBoard}
         selectedCount={store.selectedIds.length}
-        onDeleteSelected={store.deleteSelected}
-        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) store.clearBoard(); }}
+        onDeleteSelected={deleteSelectedBoard}
+        canEditSelected={canEditSelected}
+        onEditSelected={() => { editSelectedContent(); }}
+        onDuplicateSelected={duplicateSelectedBoard}
+        onBringToFront={() => moveSelectedLayer('front')}
+        onSendToBack={() => moveSelectedLayer('back')}
+        onClear={() => { if (confirm('¿Limpiar toda la pizarra?')) clearBoard(); }}
         onExport={() => {
           if (!stageRef.current) return;
           const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
           const a = document.createElement('a'); a.download = 'pizarra.png'; a.href = uri;
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }}
-        onImport={e => { const f = e.target.files?.[0]; if (f) { const fr = new FileReader(); fr.onload = ev => addImage(ev.target?.result as string); fr.readAsDataURL(f); } }}
+        onImport={e => {
+          if (store.isReadOnly) return;
+          const f = e.target.files?.[0];
+          if (f) {
+            const fr = new FileReader();
+            fr.onload = ev => addImage(ev.target?.result as string);
+            fr.readAsDataURL(f);
+          }
+        }}
         onZoomIn={() => zoom(1.2)} onZoomOut={() => zoom(0.8)}
         onZoomReset={() => { store.setStageScale(1); store.setStagePos({ x: 0, y: 0 }); }}
         onInsertFormula={handleInsertFormula}
         onOpenGraphModal={() => { setInitialFormula(null); setShowGraph(true); }}
         onShare={() => setShowShare(true)}
         onSave={saveBoard} onLoad={loadBoard}
+        readOnly={store.isReadOnly}
       />
 
       {/* Text editor overlay */}
@@ -406,20 +637,32 @@ export default function Whiteboard() {
           onBlur={commitText}
           onKeyDown={e => {
             if (e.key === 'Escape') { setTextEditor(null); setTextValue(''); }
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+            if (e.key === 'Enter' && textEditor.kind === 'code' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              commitText();
+            }
+            if (e.key === 'Enter' && textEditor.kind !== 'code' && !e.shiftKey) {
+              e.preventDefault();
+              commitText();
+            }
           }}
           style={{
             position: 'fixed', zIndex: 500, left: textEditor.sx, top: textEditor.sy,
-            minWidth: 160, minHeight: 48,
-            background: store.tool === 'sticky' ? '#fde68a' : 'rgba(15,15,20,0.95)',
-            border: `2px solid ${store.tool === 'sticky' ? '#f59e0b' : store.color}`,
-            borderRadius: 10, color: store.tool === 'sticky' ? '#78350f' : store.color,
+            width: textEditor.width ? `${textEditor.width * store.stageScale}px` : textEditor.kind === 'code' ? `${420 * store.stageScale}px` : undefined,
+            height: textEditor.height ? `${textEditor.height * store.stageScale}px` : textEditor.kind === 'code' ? `${220 * store.stageScale}px` : undefined,
+            minWidth: textEditor.kind === 'code' ? 320 : textEditor.kind === 'sticky' ? 180 : 160,
+            minHeight: textEditor.kind === 'code' ? 140 : textEditor.kind === 'sticky' ? 120 : 48,
+            background: textEditor.kind === 'sticky' ? '#fde68a' : textEditor.kind === 'code' ? '#0f172a' : 'rgba(15,15,20,0.95)',
+            border: `2px solid ${textEditor.kind === 'sticky' ? '#f59e0b' : textEditor.kind === 'code' ? '#06b6d4' : textEditor.fill || store.color}`,
+            borderRadius: 10,
+            color: textEditor.kind === 'sticky' ? '#78350f' : textEditor.kind === 'code' ? '#e2e8f0' : textEditor.fill || store.color,
             outline: 'none', resize: 'both',
-            fontSize: `${store.fontSize * store.stageScale}px`,
-            fontFamily: 'Inter, sans-serif', padding: '10px 14px', lineHeight: 1.5,
+            fontSize: `${(textEditor.fontSize || store.fontSize) * store.stageScale}px`,
+            fontFamily: textEditor.fontFamily || (textEditor.kind === 'code' ? 'Fira Code, Consolas, monospace' : 'Inter, sans-serif'),
+            padding: '10px 14px', lineHeight: textEditor.kind === 'code' ? 1.35 : 1.5,
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}
-          placeholder={store.tool === 'sticky' ? 'Escribe tu nota...' : 'Escribe... (Enter para confirmar)'}
+          placeholder={textEditor.kind === 'sticky' ? 'Escribe tu nota...' : textEditor.kind === 'code' ? 'Pega o escribe el código...' : 'Escribe... (Enter para confirmar)'}
         />
       )}
 
@@ -437,14 +680,31 @@ export default function Whiteboard() {
         );
       })}
 
-      <div style={{ display: showGraph ? 'block' : 'none' }}>
-        <GraphFullscreen
-          onClose={() => setShowGraph(false)}
-          onInsert={els => { const u = [...store.elements, ...els]; store.pushHistory(u); setShowGraph(false); }}
-          initialFormula={initialFormula}
-          initialIs3D={initialIs3D}
-        />
-      </div>
+      {showGraph && (
+        <Suspense fallback={<div className="graph-container graph-loader">Cargando graficador...</div>}>
+          <GraphFullscreen
+            onClose={() => setShowGraph(false)}
+            onInsert={els => {
+              if (!store.isReadOnly) {
+                const board = useBoardStore.getState();
+                const centerX = (window.innerWidth / 2 - board.stagePos.x) / board.stageScale;
+                const centerY = (window.innerHeight / 2 - board.stagePos.y) / board.stageScale;
+                const offsetX = centerX - window.innerWidth / 2;
+                const offsetY = centerY - window.innerHeight / 2;
+                const centeredEls = els.map(el => ({
+                  ...el,
+                  x: el.x === undefined ? el.x : el.x + offsetX,
+                  y: el.y === undefined ? el.y : el.y + offsetY,
+                }));
+                commitElements([...board.elements, ...centeredEls]);
+              }
+              setShowGraph(false);
+            }}
+            initialFormula={initialFormula}
+            initialIs3D={initialIs3D}
+          />
+        </Suspense>
+      )}
 
       {showShare && (
         <ShareModal
@@ -452,13 +712,22 @@ export default function Whiteboard() {
           isConnected={isConnected}
           onConnect={(room, name) => {
             store.setRoomId(room);
-            connect(room, name);
-            setIsConnected(true);
+            setIsConnected(false);
+            connect(room, name, status => setIsConnected(status === 'connected'));
             const url = new URL(window.location.href);
             url.searchParams.set('room', room);
             window.history.replaceState({}, '', url.toString());
           }}
-          onDisconnect={() => { disconnect(); store.setRoomId(''); setIsConnected(false); }}
+          onDisconnect={() => {
+            disconnect();
+            store.setRoomId('');
+            store.setIsReadOnly(false);
+            setIsConnected(false);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('room');
+            url.searchParams.delete('mode');
+            window.history.replaceState({}, '', url.toString());
+          }}
         />
       )}
 
@@ -468,7 +737,7 @@ export default function Whiteboard() {
         x={store.stagePos.x} y={store.stagePos.y}
         scaleX={store.stageScale} scaleY={store.stageScale}
         draggable={store.tool === 'pan'}
-        onDragEnd={(e: any) => { if (e.target === stageRef.current) store.setStagePos({ x: e.target.x(), y: e.target.y() }); }}
+        onDragEnd={e => { if (e.target === stageRef.current) store.setStagePos({ x: e.target.x(), y: e.target.y() }); }}
         onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
         onTouchStart={handleMouseDown} onTouchMove={handleMouseMove} onTouchEnd={handleMouseUp}
         onWheel={handleWheel} style={{ cursor }}
@@ -489,9 +758,7 @@ export default function Whiteboard() {
                   if (store.tool === 'eraser-stroke') {
                     e.cancelBubble = true;
                     const filtered = store.elements.filter(i => i.id !== el.id);
-                    store.setElements(filtered);
-                    store.pushHistory(filtered);
-                    if (isConnected) syncElements(filtered);
+                    commitElements(filtered);
                     return;
                   }
                   if (store.tool !== 'select') return;
@@ -511,9 +778,7 @@ export default function Whiteboard() {
                   if (store.tool === 'eraser-stroke') {
                     e.cancelBubble = true;
                     const filtered = store.elements.filter(i => i.id !== el.id);
-                    store.setElements(filtered);
-                    store.pushHistory(filtered);
-                    if (isConnected) syncElements(filtered);
+                    commitElements(filtered);
                     return;
                   }
                   if (store.tool !== 'select') return;
@@ -521,6 +786,7 @@ export default function Whiteboard() {
                   store.setSelectedIds(add ? (store.selectedIds.includes(el.id) ? store.selectedIds.filter(i => i !== el.id) : [...store.selectedIds, el.id]) : [el.id]);
                 }}
                 onChange={a => handleChange(el.id, a)}
+                onEdit={() => { openElementEditor(el); }}
                 onNode={n => { if (n) nodeRefs.current[el.id] = n; else delete nodeRefs.current[el.id]; }}
                 onDragStart={() => handleNodeDragStart(el.id)}
                 onDragMove={(e) => handleNodeDragMove(el.id, e)}
@@ -533,8 +799,8 @@ export default function Whiteboard() {
             onTransformEnd={() => {
               if (!trRef.current) return;
               const nodes = trRef.current.nodes();
-              let updated = [...store.elements];
-              nodes.forEach((node: any) => {
+              const updated = [...store.elements];
+              nodes.forEach(node => {
                 const idx = updated.findIndex(e => e.id === node.id());
                 if (idx !== -1) {
                   const el = updated[idx];
@@ -543,8 +809,7 @@ export default function Whiteboard() {
                   updated[idx] = { ...el, x: node.x(), y: node.y(), width: Math.max(5, (el.width || 0) * sx), height: Math.max(5, (el.height || 0) * sy), rotation: node.rotation() };
                 }
               });
-              store.pushHistory(updated);
-              if (isConnected) syncElements(updated);
+              commitElements(updated);
             }}
           />
 

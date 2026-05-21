@@ -20,30 +20,44 @@ function generateRoom() {
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDisconnect, isConnected }) => {
-  const { roomId, userName, setUserName, peers } = useBoardStore();
+  const { roomId, userName, setUserName, peers, isReadOnly } = useBoardStore();
   const [inputRoom, setInputRoom] = useState(roomId || generateRoom());
   const [inputName, setInputName] = useState(userName);
   const [copied, setCopied] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [shareAsViewOnly, setShareAsViewOnly] = useState(false);
+  const [shareAsViewOnly, setShareAsViewOnly] = useState(isReadOnly);
 
   const isJoinMode = !!new URLSearchParams(window.location.search).get('room');
+  const normalizedRoom = inputRoom.trim();
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(inputRoom)}${shareAsViewOnly ? '&mode=view' : ''}`;
+  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(normalizedRoom)}${shareAsViewOnly ? '&mode=view' : ''}`;
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
+  const handleCopy = useCallback(async () => {
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard no disponible');
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      const fallback = document.createElement('textarea');
+      fallback.value = shareUrl;
+      fallback.setAttribute('readonly', 'true');
+      fallback.style.position = 'fixed';
+      fallback.style.opacity = '0';
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand('copy');
+      document.body.removeChild(fallback);
+    } finally {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }
   }, [shareUrl]);
 
   const handleConnect = useCallback(() => {
     setJoining(true);
     setUserName(inputName || 'Anónimo');
-    onConnect(inputRoom, inputName || 'Anónimo');
+    onConnect(normalizedRoom, inputName || 'Anónimo');
     setTimeout(() => setJoining(false), 1500);
-  }, [inputRoom, inputName, onConnect, setUserName]);
+  }, [normalizedRoom, inputName, onConnect, setUserName]);
 
   return (
     <div className="share-modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -202,7 +216,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
             <button
               className="btn-primary"
               onClick={handleConnect}
-              disabled={joining || !inputRoom.trim()}
+              disabled={joining || !normalizedRoom}
               style={{ flex: 1, justifyContent: 'center', opacity: joining ? 0.7 : 1 }}
             >
               {joining ? (
@@ -214,7 +228,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ onClose, onConnect, onDi
         </div>
 
         <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
-          La colaboración usa WebSockets seguros. Todos los datos se comparten en tiempo real entre los usuarios de la sala.
+          La colaboración usa Yjs entre pares. Los cambios se comparten en tiempo real entre los usuarios de la sala.
         </p>
       </div>
     </div>

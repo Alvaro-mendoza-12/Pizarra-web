@@ -4,7 +4,8 @@ import {
   Minus, Type, Download, Upload, Undo2, Redo2, Hand, Trash2,
   ZoomIn, ZoomOut, RotateCcw, Grid, Sigma, ArrowUpRight,
   Plus, Activity, Highlighter, StickyNote, Triangle,
-  Share2, Save, FolderOpen, Palette, Sun, Moon
+  Share2, Save, FolderOpen, Palette, Sun, Moon, Code2, Eye,
+  PencilLine, CopyPlus, BringToFront, SendToBack
 } from 'lucide-react';
 import type { Tool } from '../types';
 import { useBoardStore } from '../store/boardStore';
@@ -53,6 +54,7 @@ const TOOL_GROUPS = [
     tools: [
       { tool: 'text' as Tool, icon: Type, label: 'Texto', shortcut: 'T' },
       { tool: 'sticky' as Tool, icon: StickyNote, label: 'Nota adhesiva', shortcut: 'N' },
+      { tool: 'code' as Tool, icon: Code2, label: 'Bloque de código', shortcut: 'K' },
     ]
   },
   {
@@ -75,12 +77,18 @@ interface ToolbarProps {
   onZoomOut: () => void;
   onZoomReset: () => void;
   onDeleteSelected: () => void;
+  onEditSelected: () => void;
+  onDuplicateSelected: () => void;
+  onBringToFront: () => void;
+  onSendToBack: () => void;
   onInsertFormula: (formula: string, is3D: boolean) => void;
   onOpenGraphModal: () => void;
   onShare: () => void;
   onSave: () => void;
   onLoad: () => void;
   selectedCount: number;
+  canEditSelected: boolean;
+  readOnly: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = (p) => {
@@ -111,6 +119,11 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
     groups[f.group].push(f);
   });
 
+  const editingTools = new Set<Tool>([
+    'pen', 'highlighter', 'eraser', 'eraser-stroke', 'rect', 'circle',
+    'triangle', 'line', 'arrow', 'axis', 'text', 'sticky', 'code'
+  ]);
+
   return (
     <>
       {/* ── Top Bar ──────────────────────────────────────── */}
@@ -128,11 +141,13 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         <div className="toolbar-sep-v" />
 
         <button className={`toolbar-btn ${!p.canUndo ? '' : ''}`} onClick={p.onUndo} title="Deshacer (Ctrl+Z)"
-          style={{ opacity: p.canUndo ? 1 : 0.35 }}>
+          disabled={p.readOnly || !p.canUndo}
+          style={{ opacity: p.readOnly || !p.canUndo ? 0.35 : 1 }}>
           <Undo2 size={17} />
         </button>
         <button className="toolbar-btn" onClick={p.onRedo} title="Rehacer (Ctrl+Y)"
-          style={{ opacity: p.canRedo ? 1 : 0.35 }}>
+          disabled={p.readOnly || !p.canRedo}
+          style={{ opacity: p.readOnly || !p.canRedo ? 0.35 : 1 }}>
           <Redo2 size={17} />
         </button>
 
@@ -161,11 +176,11 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         <div className="toolbar-sep-v" />
 
         <button className="toolbar-btn" onClick={p.onSave} title="Guardar board (Ctrl+S)"><Save size={17} /></button>
-        <button className="toolbar-btn" onClick={p.onLoad} title="Abrir board"><FolderOpen size={17} /></button>
+        <button className="toolbar-btn" onClick={p.onLoad} title="Abrir board" disabled={p.readOnly}><FolderOpen size={17} /></button>
         <button className="toolbar-btn" onClick={p.onExport} title="Exportar PNG"><Download size={17} /></button>
-        <label className="toolbar-btn" title="Importar imagen" style={{ cursor: 'pointer' }}>
+        <label className={`toolbar-btn ${p.readOnly ? 'is-disabled' : ''}`} title="Importar imagen" style={{ cursor: p.readOnly ? 'not-allowed' : 'pointer' }}>
           <Upload size={17} />
-          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={p.onImport} />
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={p.onImport} disabled={p.readOnly} />
         </label>
 
         <div className="toolbar-sep-v" />
@@ -209,9 +224,33 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
           <>
             <div className="toolbar-sep-v" />
             <span className="badge badge-accent">{p.selectedCount} sel.</span>
-            <button className="toolbar-btn danger" onClick={p.onDeleteSelected} title="Eliminar (Del)">
+            {p.canEditSelected && (
+              <button className="toolbar-btn" onClick={p.onEditSelected} title="Editar contenido (Enter)" disabled={p.readOnly}>
+                <PencilLine size={16} />
+              </button>
+            )}
+            <button className="toolbar-btn" onClick={p.onDuplicateSelected} title="Duplicar selección (Ctrl+D)" disabled={p.readOnly}>
+              <CopyPlus size={16} />
+            </button>
+            <button className="toolbar-btn" onClick={p.onBringToFront} title="Traer al frente" disabled={p.readOnly}>
+              <BringToFront size={16} />
+            </button>
+            <button className="toolbar-btn" onClick={p.onSendToBack} title="Enviar al fondo" disabled={p.readOnly}>
+              <SendToBack size={16} />
+            </button>
+            <button className="toolbar-btn danger" onClick={p.onDeleteSelected} title="Eliminar (Del)" disabled={p.readOnly}>
               <Trash2 size={16} color="var(--danger)" />
             </button>
+          </>
+        )}
+
+        {p.readOnly && (
+          <>
+            <div className="toolbar-sep-v" />
+            <span className="badge badge-view" title="Esta sala se abrió sin permisos de edición">
+              <Eye size={13} />
+              Solo lectura
+            </span>
           </>
         )}
       </div>
@@ -225,6 +264,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
               <button
                 key={t}
                 className={`toolbar-btn ${tool === t ? 'active' : ''}`}
+                disabled={p.readOnly && editingTools.has(t)}
                 onClick={() => {
                   if (t === 'graph') p.onOpenGraphModal();
                   else setTool(t);
@@ -250,7 +290,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
 
         <div className="toolbar-sep-h" />
 
-        <button className="toolbar-btn danger" onClick={p.onClear} title="Limpiar pizarra">
+        <button className="toolbar-btn danger" onClick={p.onClear} title="Limpiar pizarra" disabled={p.readOnly}>
           <Trash2 size={18} />
         </button>
       </div>
@@ -327,7 +367,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         </div>
 
         {/* Font size - only for text/sticky */}
-        {(tool === 'text' || tool === 'sticky') && (
+        {(tool === 'text' || tool === 'sticky' || tool === 'code') && (
           <>
             <div className="toolbar-sep-h" />
             <div style={{ width: '100%' }}>
@@ -390,7 +430,7 @@ export const Toolbar: React.FC<ToolbarProps> = (p) => {
         zIndex: 50, fontSize: 11, color: 'var(--text-muted)',
         pointerEvents: 'none', letterSpacing: 0.3, whiteSpace: 'nowrap'
       }}>
-        V · P · H · E · R · C · T · N · L · G&nbsp; | &nbsp;Scroll: zoom&nbsp; | &nbsp;Space: mover&nbsp; | &nbsp;Ctrl+Z: deshacer
+        V · P · H · E · R · C · T · N · K · L · G&nbsp; | &nbsp;Scroll: zoom&nbsp; | &nbsp;Space: mover&nbsp; | &nbsp;Ctrl+Z: deshacer
       </div>
     </>
   );

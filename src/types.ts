@@ -15,6 +15,7 @@ export type Tool =
   | 'axis'
   | 'graph'
   | 'sticky'
+  | 'code'
   | 'laser';
 
 export interface BoardElement {
@@ -39,8 +40,17 @@ export interface BoardElement {
   opacity?: number;
   // Sticky note
   stickyColor?: string;
+  // Code block
+  language?: string;
   // Highlighter
   isHighlighter?: boolean;
 }
 
 export type Point = { x: number; y: number };
+
+export interface BoardPeer {
+  id: string;
+  name: string;
+  color: string;
+  cursor?: Point;
+}
